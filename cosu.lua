@@ -69,8 +69,8 @@ local tPatterns = {
     { "^%[%[%]%]", colorMatch["string"] },
     { "^%[%[.-[^\\]%]%]", colorMatch["string"] },
     { "^[\127\162\163\165\169\174\182\181\177\183\186\188\189\190\215\247@]+", colorMatch["special"] },
-    { "^[xA-Fa-f.]+[%d]+", colorMatch["number"] },
-    { "^[%d#]+", colorMatch["number"] },
+    { "^[%d][xA-Fa-f.%d#]+", colorMatch["number"] },
+    { "^[%d]+", colorMatch["number"] },
     { "^[,{}%[%]%(%)]", colorMatch["bracket"] },
     { "^[!%/\\:~<>=%*%+%-%%]+", colorMatch["operator"] },
     { "^true", colorMatch["number"] },
@@ -85,7 +85,11 @@ local tPatterns = {
     end },
     { "^[^%w_]", colorMatch["text"] }
 }
-local sVersion = "1.0.0"
+local sGithub = {
+    ["api"]="https://api.github.com/repos/1turtle/consult/releases/latest",
+    ["latest"]="https://github.com/1Turtle/consult/releases/latest/download/cosu.lua"
+}
+local sVersion = "1.1.0"
 local sPath = ""
 local tAutoCompleteList = { }
 local tContent = { }
@@ -137,9 +141,113 @@ local function splitStr(str)
     return table.unpack(tStrings)
 end
 
+local function formatText(sText,nLength,nColumns)
+    --[[ splitting ]]
+    local tSubText = {}
+    for i=1,#sText/nLength do
+        tSubText[#tSubText+1] = sText:sub(1,nLength)
+        sText = sText:sub(nLength+1)
+    end
+    tSubText[#tSubText+1] = sText
+    --[[ remove column overflow ]]
+    sText = {}
+    for i=1,nColumns do
+        sText[i]=tSubText[i]
+    end
+    sText[#sText] = sText[#sText]:sub(1,nLength-3).."..."
+    return table.unpack(sText)
+end
 
 --[[ +++ Popup handler +++ ]]
-local function info(event, ...)
+local update,info,help,file,error,options,exit
+
+function update(event, ...)
+    if event == "close" then
+        for index,pop in pairs(tPopup) do
+            if pop.name == "Update CONSULT" then
+                table.remove(tPopup, index)
+            end
+        end
+    elseif event == "check" then
+        --[[ Check updates ]]
+        if http then
+            local gitAPI=http.get(sGithub.api)
+            if gitAPI.getResponseCode()==200 then
+                local tGitContent = textutils.unserialiseJSON(gitAPI.readAll())
+                if tGitContent.tag_name ~= sVersion then
+                    gitAPI.close()
+                    return true,tGitContent.tag_name,tGitContent.body
+                end
+            end
+            gitAPI.close()
+        end
+        return false
+    elseif event == "now" then
+        --[[ GET UPDATE ]]
+        local gitAPI=http.get(sGithub.latest)
+        if gitAPI.getResponseCode()==200 then
+            local tGitContent = gitAPI.readAll()
+            local file = fs.open(shell.getRunningProgram(),'w')
+            file.flush()
+            file.write(tGitContent)
+            file.close()
+        end
+        gitAPI.close()
+        --[[ Update popup ]]
+        for index,pop in pairs(tPopup) do
+            if pop.name == "Update CONSULT" then
+                tPopup[index].size = {
+                    ['x'] = nil,
+                    ['y'] = nil
+                }
+                tPopup[index].button = {
+                    { ['x']=42, ['y']=9, ["label"]="Thanks", ["status"]=false, ["func"]=function() update("close") end }
+                }
+                tPopup[index].text={
+                    {
+                        "UPDATE COMPLETE",
+                    },{
+                        "Congratulations! The program just got updated!",
+                        "Restart Consult to make changes take effect.",
+                        "Check out the changelog on Github.",
+                        "(see 'About' page under the 'Info' category for",
+                        " the link to the developers Github.)"
+                    }
+                }
+            end
+        end
+    elseif event == "create" then
+        local bAvailable,sNewVersion,sChangelog = update("check")
+        --[[ Update available ]]
+        if bAvailable then
+            local tChangelog = {formatText(sChangelog,47,3)}
+            table.insert(tPopup, 1, {
+                ["status"] = true,
+                ["name"] = "Update CONSULT",
+                ["size"] = {
+                    ['x'] = nil,
+                    ['y'] = nil
+                },
+                ["text"] = {
+                    {
+                        "UPDATE AVAILABLE",
+                    },{
+                        "v"..sVersion.." --> v"..sNewVersion.."  | Do you want to update now?",
+                        "",
+                        table.unpack(tChangelog)
+                    }
+                },
+                ["button"] = {
+                    { ['x']=45, ['y']=6+#tChangelog, ["label"]="Yes", ["status"]=false, ["func"]=function() update("now") end },
+                    { ['x']=42, ['y']=6+#tChangelog, ["label"]="No", ["status"]=false, ["func"]=function() update("close") end }
+                }
+            })
+            tCursor.selectedItem = 1
+        end
+    end
+end
+
+function info(event, ...)
     if event == "close" then
         for index,pop in pairs(tPopup) do
             if pop.name == "About CONSULT" then
@@ -172,7 +280,7 @@ local function info(event, ...)
     end
 end
 
-local function help(event, ...)
+function help(event, ...)
     if event == "close" then
         for index,pop in pairs(tPopup) do
             if pop.name:sub(1,9) == "Help Page" then
@@ -253,7 +361,7 @@ local function help(event, ...)
     end
 end
 
-local function file(event, ...)
+function file(event, ...)
     local tArgs = { ... }
     if event == "close" then
         for index,pop in pairs(tPopup) do
@@ -395,7 +503,7 @@ local function file(event, ...)
     end
 end
 
-local function error(event, ...)
+function error(event, ...)
     if event == "close" then
         for index,pop in pairs(tPopup) do
             if pop.name:find("Error") then
@@ -434,7 +542,7 @@ local function error(event, ...)
     end
 end
 
-local function options(event, ...)
+function options(event, ...)
     local sDir = '/'..fs.getDir(shell.getRunningProgram())..'/'
     if event == "load" then 
         if fs.exists(sDir..".cosu.conf") then
@@ -483,7 +591,7 @@ local function options(event, ...)
     end
 end
 
-local function exit(event, ...)
+function exit(event, ...)
     if event == "close" then
         for index,pop in pairs(tPopup) do
             if pop.name == "Warning" then
@@ -539,7 +647,6 @@ local tToolbar = {
         ["Help"]=function() help("create") end}
     }}
 }
-
 
 function category.reset()
     tCursor.selectedItem = 1
@@ -795,7 +902,7 @@ function draw.popup(popup)
     end
     --[[ Define X & Y pos, if not present ]]    
     if type(popup.x or popup.y) == "nil" then
-        popup.x = math.floor((w/2)-(size.w/2)+1)
+        popup.x = math.floor((w/2)-(size.w/2))
         popup.y = math.floor((h/2)-(size.h/2))
     end
     --[[ Border/BG ]]
@@ -898,7 +1005,7 @@ function draw.dropdown(tList, nX, nY)
     local nW,nH = 0,0
     for i=1,#tList do
         for k,_ in pairs(tList[i]) do
-            if #k > nW then nW = #k+1 end
+            if #k+1 > nW then nW = #k+1 end
             nH = nH + 1
         end
         nH = nH + 1
@@ -1504,8 +1611,10 @@ end
 function input.handle.insert(event)
     if event[2] == keys.leftAlt then
         tActiveKeys[keys.leftAlt] = (event[1] == "key")
+        return
     end if event[2] == keys.leftCtrl or event[2] == keys.rightCtrl then
         tActiveKeys["CTRL"] = (event[1] == "key")
+        return
     end
     if event[1] == "key" then
         if event[2] == keys.up and type(input[mode].cursorVertical) == "function" then
@@ -1550,7 +1659,6 @@ function input.handle.mouse(event)
     end
 end
 
-
 local tArgs = { ... }
 local function init()
     --[[ Check args ]]
@@ -1577,6 +1685,7 @@ local function init()
     else
         table.insert(tContent, "")
     end
+    --[[ Options ]]
     options("load")
     return true
 end
@@ -1610,6 +1719,8 @@ local function main()
         end
     elseif event[1]:find("key") then
         input.handle.insert(event)
+    elseif event[1]=="paste" then
+        input.insert.char(event[2])
     elseif event[1]:find("mouse") then
         input.handle.mouse(event)
     elseif event[1] == "term_resize" then
@@ -1640,7 +1751,7 @@ if not init() then
     return false
 end
 draw.handler()
-parallel.waitForAny(
+parallel.waitForAll(
     function()
         while running == true do
             main()
@@ -1653,7 +1764,18 @@ parallel.waitForAny(
                     loadAPIVirtual(sLine)
                 end
             end
+            if not running then break end
             sleep(4)
+        end
+    end,
+    function()
+        --[[ Check updates ]]
+        if update("check") then
+            for i,category in pairs(tToolbar) do
+                if category.name == "Info" then
+                    tToolbar[i].content[1]["Update"]=function() update("create") end
+                end
+            end
         end
     end
 )
@@ -1681,5 +1803,6 @@ if type(running) == "number" then
         else
             print(" file!")
         end
+        sleep(0.5)
     end
 end
