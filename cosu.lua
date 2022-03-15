@@ -2,6 +2,7 @@
 local cosuConf = {}
 cosuConf.bCursorIsBlock = false
 cosuConf.cAccentColor = colors.blue
+cosuConf.bDoubleClickButton = false
 cosuConf.sTabSpace = "    " --[[ Normaly 4 spaces. ]]
 --[[ Color palette for .lua files ]]
 local colorMatch = { }
@@ -89,7 +90,7 @@ local sGithub = {
     ["api"]="https://api.github.com/repos/1turtle/consult/releases/latest",
     ["latest"]="https://github.com/1Turtle/consult/releases/latest/download/cosu.lua"
 }
-local sVersion = "1.1.0"
+local sVersion = "1.1.1"
 local sPath = ""
 local tAutoCompleteList = { }
 local tContent = { }
@@ -103,7 +104,7 @@ local virtualEnviroment = _ENV
 local tPopup = {}
 local bReadOnly = false
 local running = true
-local bSaved,bSamefile = true, false
+local bSaved = true
 local category = { }
 
 
@@ -366,9 +367,6 @@ function file(event, ...)
     if event == "close" then
         for index,pop in pairs(tPopup) do
             if pop.name:sub(1,7) == "File - " then
-                if pop.name == "File - GetName" then
-                    sPath = pop.textBox[1].input
-                end
                 table.remove(tPopup, index)
             end
         end
@@ -383,9 +381,10 @@ function file(event, ...)
             ["text"] = {
                 { "File already Exists! Replace it?" }
             },
+            ["tmp"]=tArgs[1],
             ["button"] = {
                 { ['x']=26, ['y']=3, ["label"]="No", ["status"]=false, ["func"]=function() file("close") file("create", "save as") end },
-                { ['x']=29, ['y']=3, ["label"]="Yes", ["status"]=false, ["func"]=function() file("close") file("create", "save", "force") end }
+                { ['x']=29, ['y']=3, ["label"]="Yes", ["status"]=false, ["func"]=function() local tmp=tPopup[1].tmp file("close") file("create", "save", tmp, "force") end }
             }
         })
         tCursor.selectedItem = 1
@@ -419,25 +418,31 @@ function file(event, ...)
         multishell.setTitle(tabId, sPathName.."-cosu")
     elseif event == "create" then
         if tArgs[1] == "save" then
-            if sPath == "" then
-                file("create", "save as")
-                return
-            elseif not bSamefile and fs.exists(sPath) and tArgs[2] ~= "force" then
-                file("replace")
+            local tmpPath = sPath
+            if type(tArgs[2])=="string" then
+                tmpPath = tArgs[2]
+            end
+            if fs.exists(tmpPath) and tmpPath~=sPath and tArgs[3]~="force" then
+                file("replace", tmpPath)
                 return
             end
-            local f = fs.open(sPath, 'w')
+            local f = fs.open(tmpPath, 'w')
             if f then
                 for _,sLine in pairs(tContent) do
                     f.writeLine(sLine)
                 end
                 f.close()
                 bSaved = true
+                sPath = tmpPath
                 file("saved")
             else
-                file("create", "save as")
+                file("create", "save as", "error")
             end
         elseif tArgs[1] == "save as" then
+            local tMsg = {}
+            if tArgs[2]=="error" then
+                tMsg = {"Invalid path!"}
+            end
             table.insert(tPopup, 1, {
                 ["status"] = true,
                 ["name"] = "File - GetName",
@@ -446,14 +451,14 @@ function file(event, ...)
                     ['y'] = nil
                 },
                 ["text"] = {
-                    { "Enter new path:","" }
+                    { table.unpack(tMsg),"Enter new path:","" }
                 },
                 ["textBox"] = {
-                    { ['x']=1, ['y']=2, ["input"]=sPath }
+                    { ['x']=1, ['y']=2+#tMsg, ["input"]=sPath }
                 },
                 ["button"] = {
-                    { ['x']=8, ['y']=4, ["label"]="Abort", ["status"]=false, ["func"]=function() file("close") end },
-                    { ['x']=14, ['y']=4, ["label"]="Ok", ["status"]=false, ["func"]=function() file("close") file("create", "save") end }
+                    { ['x']=8, ['y']=4+#tMsg, ["label"]="Abort", ["status"]=false, ["func"]=function() file("close") end },
+                    { ['x']=14, ['y']=4+#tMsg, ["label"]="Ok", ["status"]=false, ["func"]=function() local tmp=tPopup[1].textBox[1].input file("close") file("create", "save", tmp) end }
                 }
             })
             tCursor.selectedItem = 1
@@ -550,7 +555,8 @@ function options(event, ...)
             if not configFunc then
                 error("create", {"Error in config file!"}, {"> "..err})
             else
-                local tMissingValues = {}
+                local tWrongValues = {}
+                local bMissingValues = false
                 for sConfigName,value in pairs(cosuConf) do
                     local bSuccess = xpcall(
                         configFunc,
@@ -560,24 +566,33 @@ function options(event, ...)
                         end
                     )
                     if bSuccess then
-                    local newValue = configFunc()[sConfigName]
+                        local newValue = configFunc()[sConfigName]
                         if type(newValue) == type(value) then
                             cosuConf[sConfigName] = newValue
                         elseif type(newValue) == "nil" then
-                            tMissingValues[#tMissingValues+1] = "\'"..sConfigName.. "\' expected \'"..type(value)..'\''
+                            bMissingValues = true
+                        else
+                            tWrongValues[#tWrongValues+1] = "\'"..sConfigName.. "\' expected \'"..type(value)..'\''
                         end
                     end
                 end
-                if #tMissingValues > 0 then
+                if bMissingValues then
+                    options("add missing")
+                end
+                if #tWrongValues > 0 then
                     error("create",
                         {"The following values in",
                         '\''..sDir..".cosu.conf\'",
                         "are wrong:"},
-                        {table.unpack(tMissingValues)}
+                        {table.unpack(tWrongValues)}
                     )
                 end
             end
         end
+    elseif event == "add missing" then
+        local f = fs.open(sDir..".cosu.conf", 'w')
+        f.write( "return "..textutils.serialize(cosuConf) )
+        f.close()
     elseif event == "create" then
         if not fs.exists(sDir..".cosu.conf") then
             local f = fs.open(sDir..".cosu.conf", 'w')
@@ -585,8 +600,9 @@ function options(event, ...)
             f.close()
         end
         local tabId = multishell.launch(_ENV,
-        shell.getRunningProgram(),
-        sDir..".cosu.conf")
+            shell.getRunningProgram(),
+            sDir..".cosu.conf"
+        )
         multishell.setTitle(tabId, "[options]-cosu")
     end
 end
@@ -1395,11 +1411,10 @@ function input.menu.mouseClick(nButton, nX, nY)
         end
         for nIndex,tB in pairs(tPopup[1].button) do
             if nX >= tPopup[1].x+tB.x and nX < tPopup[1].x+tB.x+#tB.label and nY == tPopup[1].y+tB.y then
-                if tCursor.selectedItem ~= nIndex+nItems then
-                    tCursor.selectedItem = nIndex+nItems
-                else
+                if (cosuConf.bDoubleClickButton and tCursor.selectedItem==nIndex+nItems) or not cosuConf.bDoubleClickButton then
                     tB.func()
                 end
+                tCursor.selectedItem = nIndex+nItems
                 return
             end
         end
@@ -1677,7 +1692,6 @@ local function init()
                 tContent[#tContent+1] = sLine
                 sLine = file.readLine()
             end
-            bSamefile = true
             file.close()
         else
             table.insert(tContent, "")
@@ -1751,32 +1765,39 @@ if not init() then
     return false
 end
 draw.handler()
-parallel.waitForAll(
+parallel.waitForAny(
     function()
         while running == true do
             main()
         end
     end,
+    --[[ BG tasks ]]
     function()
-        while running==true do
-            for _,sLine in pairs(tContent) do
-                if sLine:find("require") or sLine:find("os.loadAPI") or sLine:find("peripheral") then
-                    loadAPIVirtual(sLine)
+        parallel.waitForAll(
+            function()
+                while running==true do
+                    for _,sLine in pairs(tContent) do
+                        if sLine:find("require") or sLine:find("os.loadAPI") or sLine:find("peripheral") then
+                            loadAPIVirtual(sLine)
+                        end
+                    end
+                    if #tContent > 100 then
+                        sleep(4)
+                    else sleep(0.5)
+                    end
+                end
+            end,
+            function()
+                --[[ Check updates ]]
+                if update("check") then
+                    for i,category in pairs(tToolbar) do
+                        if category.name == "Info" then
+                            tToolbar[i].content[1]["Update"]=function() update("create") end
+                        end
+                    end
                 end
             end
-            if not running then break end
-            sleep(4)
-        end
-    end,
-    function()
-        --[[ Check updates ]]
-        if update("check") then
-            for i,category in pairs(tToolbar) do
-                if category.name == "Info" then
-                    tToolbar[i].content[1]["Update"]=function() update("create") end
-                end
-            end
-        end
+        )
     end
 )
 
