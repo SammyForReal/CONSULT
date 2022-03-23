@@ -90,7 +90,7 @@ local sGithub = {
     ["api"]="https://api.github.com/repos/1turtle/consult/releases/latest",
     ["latest"]="https://github.com/1Turtle/consult/releases/latest/download/cosu.lua"
 }
-local sVersion = "1.1.1"
+local sVersion = "1.1.2"
 local sPath = ""
 local tAutoCompleteList = { }
 local tContent = { }
@@ -498,9 +498,17 @@ function file(event, ...)
         local sDir = '/'..fs.getDir(shell.getRunningProgram())..'/'
         local f = fs.open(sDir..".tmp"..multishell.getCurrent(), 'w')
         f.flush()
+        f.write("local c=[[")
         for _,sLine in pairs(tContent) do
             f.writeLine(sLine)
         end
+        f.writeLine("]]local o,f,e=false,loadstring(c)")
+        f.writeLine("if type(f)~=\"nil\" then o,e=pcall(f) end")
+        f.writeLine("if not o then")
+        f.writeLine("local x=e:reverse():find(\":[%d]+:\")")
+        f.writeLine("printError(\"ERROR:\"..e:sub(#e-x))")
+        f.writeLine("print(\"Press any key to exit.\")")
+        f.writeLine("os.pullEvent(\"char\") end")
         f.close()
         local nID = multishell.launch(_ENV, sDir..".tmp"..multishell.getCurrent(), ...)
         multishell.setTitle(nID, "[run]-cosu")
@@ -1186,7 +1194,7 @@ function input.insert.cursorHorizontal(sWay, bJump)
                 if tCursor.x-tScroll.x+1 < 1 then
                     tScroll.x = tScroll.x - 1
                 end
-            until not bJump or tCursor.x <= 1 or tContent[tCursor.y]:sub(tCursor.x-1,tCursor.x-1)==' '
+            until not bJump or tCursor.x <= 1 or tContent[tCursor.y]:sub(tCursor.x-1,tCursor.x-1):match('[ %(%)%.]')
         elseif tCursor.x == 1 and tCursor.y ~= 1 then
             tCursor.y = tCursor.y - 1
             tCursor.x = #tContent[tCursor.y] + 1
@@ -1204,7 +1212,7 @@ function input.insert.cursorHorizontal(sWay, bJump)
                 if tCursor.x-tScroll.x+1 >= w then
                     tScroll.x = tScroll.x + 1
                 end
-            until not bJump or tCursor.x >= #tContent[tCursor.y] or tContent[tCursor.y]:sub(tCursor.x,tCursor.x)==' '
+            until not bJump or tCursor.x >= #tContent[tCursor.y] or tContent[tCursor.y]:sub(tCursor.x-1,tCursor.x-1):match('[ %(%)%.]')
         elseif tCursor.y < #tContent then
             tCursor.x = 1
             tCursor.lastX = tCursor.x
@@ -1240,6 +1248,7 @@ function input.insert.char(sChar,bCloseBrackets)
     if sChar == "\000" then
         sChar = '?'
     end
+    if type(tContent[tCursor.y])=="nil" then tContent[tCursor.y]="" end
     tContent[tCursor.y] = string.sub(sLine, 1, tCursor.x - 1) .. sChar .. string.sub(sLine, tCursor.x)
     for i=1,#sChar do
         input.insert.cursorHorizontal("right")
@@ -1553,13 +1562,13 @@ function input.insertAuto.cursorVertical(sWay)
         if tCursor.autoListY > 0 then
             tCursor.autoListY = tCursor.autoListY - 1
         else
-            input.insert.mouseScroll(-1)
+            input.insert.cursorVertical("up")
         end
     elseif sWay == "down" then
         if tCursor.autoListY < #tAutoCompleteList-1 then
             tCursor.autoListY = tCursor.autoListY + 1
         else
-            input.insert.mouseScroll(1)
+            input.insert.cursorVertical("down")
         end
     end
 end
