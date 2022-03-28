@@ -36,6 +36,7 @@ end
 
 
 --[[ +++ Program variables (no touching!) +++ ]]
+local nTerm=term.current()
 local loadAPIVirtual
 local tMultibleStrings = {0,0}
 --[[ .lua syntax ]]
@@ -498,17 +499,9 @@ function file(event, ...)
         local sDir = '/'..fs.getDir(shell.getRunningProgram())..'/'
         local f = fs.open(sDir..".tmp"..multishell.getCurrent(), 'w')
         f.flush()
-        f.write("local c=[[")
         for _,sLine in pairs(tContent) do
             f.writeLine(sLine)
         end
-        f.writeLine("]]local o,f,e=false,loadstring(c)")
-        f.writeLine("if type(f)~=\"nil\" then o,e=pcall(f) end")
-        f.writeLine("if not o then")
-        f.writeLine("local x=e:reverse():find(\":[%d]+:\")")
-        f.writeLine("printError(\"ERROR:\"..e:sub(#e-x))")
-        f.writeLine("print(\"Press any key to exit.\")")
-        f.writeLine("os.pullEvent(\"char\") end")
         f.close()
         local nID = multishell.launch(_ENV, sDir..".tmp"..multishell.getCurrent(), ...)
         multishell.setTitle(nID, "[run]-cosu")
@@ -819,8 +812,65 @@ function loadAPIVirtual(sLine)
 end
 
 
-local draw = { }
 --[[ +++ Draw functions +++ ]]
+local blits = {[1]='0',[2]='1',[4]='2',[8]='3',[16]='4',[32]='5',[64]='6',[128]='7',[256]='8',[512]='9',[1024]='a',[2048]='b',[4096]='c',[8192]='d',[16384]='e',[32768]='f' }
+local buf = {
+    ["b"]={},
+    ["f"]={},
+    ["t"]={}
+}
+local fTerm={
+    ["setCursorPos"]=nTerm.setCursorPos,
+    ["getCursorPos"]=nTerm.getCursorPos,
+    ["setBackgroundColor"]=nTerm.setBackgroundColor,
+    ["getBackgroundColor"]=nTerm.getBackgroundColor,
+    ["setTextColor"]=nTerm.setTextColor,
+    ["getTextColor"]=nTerm.getTextColor,
+    ["clear"]=function()
+        local nW,nH=nTerm.getSize()
+        
+        local sB=(blits[nTerm.getBackgroundColor()]):rep(nW)
+        local sF=(blits[nTerm.getTextColor()]):rep(nW)
+        local sT=(' '):rep(nW)
+        
+        for i=1,nH do
+            buf.b[i]=sB
+            buf.f[i]=sF
+            buf.t[i]=sT
+        end
+    end,
+    ["clearLine"]=function()
+        local nW,_=nTerm.getSize()
+        local _,nY=nTerm.getCursorPos()
+        local sB=(blits[nTerm.getBackgroundColor()]):rep(nW)
+        local sF=(blits[nTerm.getTextColor()]):rep(nW)
+        local sT=(' '):rep(nW)
+        
+        buf.b[nY]=sB
+        buf.f[nY]=sF
+        buf.t[nY]=sT
+    end,
+    ["write"]=function(str)
+        str = tostring(str)
+        local nX,nY=nTerm.getCursorPos()
+        nTerm.setCursorPos(nX+#str,nY)
+        local cBg=blits[nTerm.getBackgroundColor()]:rep(#str)
+        local cFg=blits[nTerm.getTextColor()]:rep(#str)
+        
+        buf.b[nY]=buf.b[nY]:sub(1,nX-1).. cBg ..buf.b[nY]:sub(nX+#str)
+        buf.f[nY]=buf.f[nY]:sub(1,nX-1).. cFg ..buf.f[nY]:sub(nX+#str)
+        buf.t[nY]=buf.t[nY]:sub(1,nX-1).. str ..buf.t[nY]:sub(nX+#str)
+    end,
+    ["render"]=function()
+        local nX,nY=nTerm.getCursorPos()
+        for i=1,#buf.t do
+            nTerm.setCursorPos(1,i)
+            nTerm.blit(buf.t[i],buf.f[i],buf.b[i])
+        end
+        nTerm.setCursorPos(nX,nY)
+    end
+} fTerm.clear()
+local draw = { }
 function draw.highlighted(sLine, nIndex)
     while #sLine > 0 do
         for _,v in pairs(tPatterns) do
@@ -1142,10 +1192,15 @@ function draw.infobar()
 end
 
 function draw.handler()
+    term.setCursorBlink(false)
+    term=fTerm
     draw.content()
     --[[ bars ]]
     draw.toolbar()
     draw.infobar()
+    term=nTerm
+    fTerm.render()
+    term.setCursorBlink(true)
     --[[ Draw popup if exists ]]
     for i=#tPopup,1,-1 do
         draw.popup(tPopup[i])
