@@ -506,18 +506,25 @@ function file(event, ...)
         end
         f.write("]]")
         f.write([[local o,e=load(c)
+        if o then
+            o,e=pcall(o)
+        end
         if not o then
-            local w1,w=e:reverse():find("[%d]+")
+            local w1,w=e:reverse():find(":[%d]+:")
             term.setCursorPos(1,1)
             term.setBackgroundColor(colors.black)
             term.setTextColor(colors.red)
-            print("ERROR:"..e:sub(#e-w+1).." ->")
+            write("ERROR:"..e:sub(#e-w1+2))
             term.setTextColor(colors.gray)
-            local pos=tonumber(e:sub(#e-w+1, #e-w1+1))
+            print(" ->\n")
+            local pos=tonumber(e:sub(#e-w+2, #e-w1))
             local count=1
             for line in c:gmatch("([^\n]*)\n?") do
                 if count>=pos then
-                    print(count..". |"..line)
+                    term.setTextColor(colors.orange)
+                    write(count..'.')
+                    term.setTextColor(colors.lightGray)
+                    print("|"..line)
                     break
                 end
                 count=count+1
