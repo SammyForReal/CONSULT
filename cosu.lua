@@ -37,6 +37,7 @@ end
 
 --[[ +++ Program variables (no touching!) +++ ]]
 local nTerm=term.current()
+local term=nTerm
 local loadAPIVirtual
 local tMultibleStrings = {0,0}
 --[[ .lua syntax ]]
@@ -91,7 +92,7 @@ local sGithub = {
     ["api"]="https://api.github.com/repos/1turtle/consult/releases/latest",
     ["latest"]="https://github.com/1Turtle/consult/releases/latest/download/cosu.lua"
 }
-local sVersion = "1.1.2"
+local sVersion = "1.1.3"
 local sPath = ""
 local tAutoCompleteList = { }
 local tContent = { }
@@ -499,9 +500,32 @@ function file(event, ...)
         local sDir = '/'..fs.getDir(shell.getRunningProgram())..'/'
         local f = fs.open(sDir..".tmp"..multishell.getCurrent(), 'w')
         f.flush()
+        f.write("local c=[[")
         for _,sLine in pairs(tContent) do
             f.writeLine(sLine)
         end
+        f.write("]]")
+        f.write([[local o,e=load(c)
+        if not o then
+            local w1,w=e:reverse():find("[%d]+")
+            term.setCursorPos(1,1)
+            term.setBackgroundColor(colors.black)
+            term.setTextColor(colors.red)
+            print("ERROR:"..e:sub(#e-w+1).." ->")
+            term.setTextColor(colors.gray)
+            local pos=tonumber(e:sub(#e-w+1, #e-w1+1))
+            local count=1
+            for line in c:gmatch("([^\n]*)\n?") do
+                if count>=pos then
+                    print(count..". |"..line)
+                    break
+                end
+                count=count+1
+            end
+            term.setTextColor(colors.white)
+            print("\nPress any key to exit.")
+            os.pullEvent("char")
+        end]])
         f.close()
         local nID = multishell.launch(_ENV, sDir..".tmp"..multishell.getCurrent(), ...)
         multishell.setTitle(nID, "[run]-cosu")
