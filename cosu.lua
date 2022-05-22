@@ -1,14 +1,36 @@
 --[[ +++ Configurable +++ ]]
 local cosuConf = {}
+cosuConf.tKeyboard = {
+    ["up"]          = keys.up,
+    ["down"]        = keys.down,
+    ["left"]        = keys.left,
+    ["right"]       = keys.right,
+    ["tab"]         = keys.tab,
+    ["delete"]      = keys.delete,
+    ["backspace"]   = keys.backspace,
+    ["enter"]       = keys.enter,
+
+    ["F_Help"]      = keys.f1,
+    ["F_SpChar"]    = keys.f7,
+    ["F_Run"]       = keys.f5,
+    ["F_NewShell"]  = keys.f4,
+    ["CTRL"] = {
+        { "NewFile", keys.n },
+        { "SaveAs", { keys.s, keys.leftShift } },
+        { "Save", keys.s },
+    }
+}
 cosuConf.bCursorIsBlock = false
 cosuConf.cAccentColor = colors.blue
 cosuConf.bDoubleClickButton = false
 cosuConf.sTabSpace = "    " --[[ Normaly 4 spaces. ]]
+cosuConf.bJumpAtEndToBegin = true
 --[[ Color palette for .lua files ]]
 local colorMatch = { }
 colorMatch["popupBG"]=colors.lightGray
 colorMatch["popupFrame"]=colors.gray
 colorMatch["popupFont"]=colors.black
+colorMatch["cAccentText"]=colors.lightGray
 if term.isColor() then
     colorMatch["bg"] = colors.black
     colorMatch["bracket"] = colors.lightGray
@@ -92,12 +114,13 @@ local sGithub = {
     ["api"]="https://api.github.com/repos/1turtle/consult/releases/latest",
     ["latest"]="https://github.com/1Turtle/consult/releases/latest/download/cosu.lua"
 }
-local sVersion = "1.1.3"
+local sVersion = "1.2.0"
+local tArgs = { ... }
+local init = function() return end
 local sPath = ""
 local tAutoCompleteList = { }
 local tContent = { }
 local tCursor = { ['x']=1,['y']=1,["lastX"]=1,["lastY"]=1,["autoListY"]=0, ["selectedItem"]=1, ["selectedSubDropdown"]={} }
-local tMarker = {["start"]=0}
 local mode = "insert" --[[ "insert";"insertAuto";"toolbar","menu"; ]]
 local tScroll = { ['x']=0,['y']=0 }
 local tActiveKeys = {}
@@ -108,6 +131,8 @@ local bReadOnly = false
 local running = true
 local bSaved = true
 local category = { }
+local tWidgets = { }
+local input = {}
 
 
 --[[ +++ Other functions +++ ]]
@@ -162,7 +187,7 @@ local function formatText(sText,nLength,nColumns)
 end
 
 --[[ +++ Popup handler +++ ]]
-local update,info,help,file,error,options,exit
+local update,info,help,file,error,options,exit,specialChar
 
 function update(event, ...)
     if event == "close" then
@@ -235,14 +260,14 @@ function update(event, ...)
                     {
                         "UPDATE AVAILABLE",
                     },{
-                        "v"..sVersion.." --> v"..sNewVersion.."  | Do you want to update now?",
+                        "v"..sVersion.." --> v"..sNewVersion.."  | Do you want to proceed?",
                         "",
                         table.unpack(tChangelog)
                     }
                 },
                 ["button"] = {
-                    { ['x']=45, ['y']=6+#tChangelog, ["label"]="Yes", ["status"]=false, ["func"]=function() update("now") end },
-                    { ['x']=42, ['y']=6+#tChangelog, ["label"]="No", ["status"]=false, ["func"]=function() update("close") end }
+                    { ['x']=42, ['y']=6+#tChangelog, ["label"]="Update", ["status"]=false, ["func"]=function() update("now") end },
+                    { ['x']=39, ['y']=6+#tChangelog, ["label"]="No", ["status"]=false, ["func"]=function() update("close") end }
                 }
             })
             tCursor.selectedItem = 1
@@ -267,16 +292,16 @@ function info(event, ...)
             },
             ["text"] = {
                 {
-                    "CONSULT (short cosu) | Text editor",
+                    "CONSULT (short cosu) | a Text editor",
                 },{
-                    "By Sammy L. Koch (aka. 1Turtle)",
-                    "Available under the MIT License.",
-                    "Version: "..sVersion,
-                    "Source: github.com/1Turtle/consult"
+                    "  Available under the MIT License.",
+                    "      (c) 2022, Sammy L. Koch",
+                    " Source: github.com/1Turtle/consult",
+                    "           Version: "..sVersion
                 }
             },
             ["button"] = {
-                { ['x']=28, ['y']=8, ["label"]="Thanks", ["status"]=false, ["func"]=function() info("close") end }
+                { ['x']=31, ['y']=8, ["label"]="Thanks", ["status"]=false, ["func"]=function() info("close") end }
             }
         })
         tCursor.selectedItem = 1
@@ -312,40 +337,39 @@ function help(event, ...)
                     {
                         "Text editor (for dummies) | (1/4)",
                     },{
-                        "* Navigate cursor with [ARROW] keys or         ",
+                        "* Navigate cursor with [ARROW] keys or    ",
                         "  by clicking with the mouse.",
                         "* [MOUSE-WHEEL] scrolls up/down.",
                         "* To type text, use your keyboard. :)",
-                        "* Remove char from the LEFT of",
-                        "  your cursor with [BACKSPACE] & from ..."
+                        "* Remove char from the LEFT of your",
+                        "  cursor with [BACKSPACE] & from ..."
                     }
                 },{
                     {
                         "Text editor (for dummies) | (2/4)",
                     },{
-                        "  the RIGHT of your cursor with [DELETE].",
-                        "* To place (4) spaces, use [TAB].",
+                        "  the RIGHT of your cursor with [DELETE]. ",
+                        "* To place ("..#tostring(cosuConf.sTabSpace)..") spaces, use [TAB].",
                         "* Autocorrect is on by default,",
-                        "  when shown, press [TAB] to apply & navigate  ",
-                        "  with [ARROW] keys.",
+                        "  when shown, press [TAB] to apply &",
+                        "  navigate with [ARROW] keys.",
                         "  (Can be Toggled via system settings.)"
                     }
                 },{
                     {
                         "Navigationbar/Popups | (3/4)",
                     },{
-                        "(You probably figured it out but anyways:)",
                         "* Click on category to show dropdown.",
-                        "* LEFT/RIGHT [ARROW] keys change category.     ",
+                        "* LEFT/RIGHT [ARROW] keys change category.",
                         "* UP/DOWN [ARROW] keys choose",
-                        "  item from dropdown.",""
+                        "  item from dropdown.","",""
                     }
                 },{
                     {
                         "Navigationbar/Popups | (4/4)",
                     },{
-                        "* Choose widget with [ARROW] keys.",
-                        "  (UP/DOWN currently works like LEFT/RIGHT.)   ",
+                        "* Choose widget with [ARROW] keys",
+                        "  (UP/DOWN works like LEFT/RIGHT.)        ",
                         "* Button: Press [ENTER] to execute.",
                         "* Textbox: Type to enter input.", "",""
                     }
@@ -355,7 +379,7 @@ function help(event, ...)
             ["text"] = { },
             ["button"] = {
                 { ['x']=10, ['y']=10, ["label"]="Next", ["status"]=false, ["func"]=function() help("change",1) end },
-                { ['x']=44, ['y']=10, ["label"]="Done", ["status"]=false, ["func"]=function() help("close") end },
+                { ['x']=39, ['y']=10, ["label"]="Done", ["status"]=false, ["func"]=function() help("close") end },
                 { ['x']=1, ['y']=10, ["label"]="Previous", ["status"]=false, ["func"]=function() help("change",-1) end }
             }
         })
@@ -416,8 +440,9 @@ function file(event, ...)
         else
             sPathName = sPathName:reverse()
         end
-        local tabId = multishell.getCurrent()
-        multishell.setTitle(tabId, sPathName.."-cosu")
+        if multishell then
+            multishell.setTitle(multishell.getCurrent(), sPathName.."-cosu")
+        end
     elseif event == "create" then
         if tArgs[1] == "save" then
             local tmpPath = sPath
@@ -459,21 +484,20 @@ function file(event, ...)
                     { ['x']=1, ['y']=2+#tMsg, ["input"]=sPath }
                 },
                 ["button"] = {
-                    { ['x']=8, ['y']=4+#tMsg, ["label"]="Abort", ["status"]=false, ["func"]=function() file("close") end },
-                    { ['x']=14, ['y']=4+#tMsg, ["label"]="Ok", ["status"]=false, ["func"]=function() local tmp=tPopup[1].textBox[1].input file("close") file("create", "save", tmp) end }
+                    { ['x']=6, ['y']=4+#tMsg, ["label"]="Abort", ["status"]=false, ["func"]=function() file("close") end },
+                    { ['x']=12, ['y']=4+#tMsg, ["label"]="Done", ["status"]=false, ["func"]=function() local tmp=tPopup[1].textBox[1].input file("close") file("create", "save", tmp) end }
                 }
             })
             tCursor.selectedItem = 1
         elseif tArgs[1] == "new" then
             if multishell then
-                local tabId = multishell.launch(_ENV, shell.getRunningProgram())
+                local tabId = multishell.launch(_G, shell.getRunningProgram())
                 multishell.setTitle(tabId, "cosu")
                 multishell.setFocus(tabId)
                 category.reset()
             else
                 if bSaved or tArgs[2] == "force" then
-                    tContent = { }
-                    table.insert(tContent, "")
+                    tContent = { "" }
                     tCursor.x,tCursor.y = 1,1
                     tScroll = { ['x']=0,['y']=0 }
                     return
@@ -498,13 +522,14 @@ function file(event, ...)
         end
     elseif event == "execute" then
         local sDir = '/'..fs.getDir(shell.getRunningProgram())..'/'
-        local f = fs.open(sDir..".tmp"..multishell.getCurrent(), 'w')
+        local sCurID = tostring( type(multishell)~="nil" and tostring(multishell.getCurrent()) or "" )
+        local f = fs.open(sDir..".tmp"..sCurID, 'w')
         f.flush()
         f.write("local function c() ")
         for _,sLine in pairs(tContent) do
             f.writeLine(sLine)
         end
-        f.write("end local path=\""..sDir..".tmp"..multishell.getCurrent().."\"")
+        f.write("end local path=\""..sDir..".tmp"..sCurID.."\"")
         f.write([[ local o,e=load(c)
         if o then
             o,e=pcall(o)
@@ -516,15 +541,23 @@ function file(event, ...)
             term.setTextColor(colors.white)
             print("\nPress any key to exit.")
             os.pullEvent("char")
-        end]])
+        end print("Press any key to exit") os.pullEventRaw("key") ]])
         f.close()
-        local nID = multishell.launch(_ENV, sDir..".tmp"..multishell.getCurrent(), ...)
-        multishell.setTitle(nID, "[run]-cosu")
-        multishell.setFocus(nID)
+        if multishell then
+            local nID = multishell.launch(_G, sDir..".tmp"..sCurID, ...)
+            multishell.setTitle(nID, "[run]-cosu")
+            multishell.setFocus(nID)
+        else
+            term.setBackgroundColor(colors.black)
+            term.setTextColor(colors.white)
+            term.clear()
+            term.setCursorPos(1,1)
+            shell.run(sDir..".tmp"..sCurID)
+        end
     end
 end
 
-function error(event, ...)
+function error(event, name, ...)
     if event == "close" then
         for index,pop in pairs(tPopup) do
             if pop.name:find("Error") then
@@ -535,10 +568,11 @@ function error(event, ...)
             end
         end
     elseif event == "create" then
+        local tArgs = { ... }
         --[[ Local get size ]]
         local nXCounter = 0
         local nLongestMsg = 7
-        for _,tMsgs in pairs({...}) do
+        for _,tMsgs in pairs(tArgs) do
             for _,sMsg in pairs(tMsgs) do
                 if #sMsg > nLongestMsg then
                     nLongestMsg = #sMsg
@@ -549,12 +583,12 @@ function error(event, ...)
         end
         table.insert(tPopup, 1, {
             ["status"] = true,
-            ["name"] = "Error - Config",
+            ["name"] = "Error - "..name,
             ["size"] = {
                 ['x'] = nil,
                 ['y'] = nil
             },
-            ["text"] = { ... },
+            ["text"] = tArgs,
             ["button"] = {
                 { ['x']=nLongestMsg-1, ['y']=nXCounter+1, ["label"]="Ok", ["status"]=false, ["func"]=function() error("close") end }
             }
@@ -564,27 +598,49 @@ function error(event, ...)
 end
 
 function options(event, ...)
-    local sDir = '/'..fs.getDir(shell.getRunningProgram())..'/'
-    if event == "load" then 
+    local tSubArgs = { ... }
+    local sDir = fs.getDir(shell.getRunningProgram())..'/'
+    if event == "close" then
+        for index,pop in pairs(tPopup) do
+            if pop.name:sub(1,10) == "Options - " then
+                table.remove(tPopup, index)
+            end
+        end
+    elseif event == "set" then
+        local sConfigName,newValue = tSubArgs[1],tSubArgs[2]
+        if type(newValue) == "table" then
+            for key,value in pairs(newValue) do
+                cosuConf[sConfigName][key] = value
+            end
+        else
+            cosuConf[sConfigName] = newValue
+        end
+    elseif event == "load" then 
         if fs.exists(sDir..".cosu.conf") then
             local configFunc, err = loadfile(sDir..".cosu.conf")
             if not configFunc then
-                error("create", {"Error in config file!"}, {"> "..err})
+                error("create", "options", {"Fatal error in config file!"}, {"> "..err})
             else
                 local tWrongValues = {}
                 local bMissingValues = false
-                for sConfigName,value in pairs(cosuConf) do
-                    local bSuccess = xpcall(
+                local bSuccess = xpcall(
                         configFunc,
                         function(err)
                             err = {splitStr(err)}
-                            error("create", {"Error in config file!"}, err)
+                            error("create", "options", {"Error in config file!"}, err)
                         end
                     )
-                    if bSuccess then
+                if bSuccess then
+                    for sConfigName,value in pairs(cosuConf) do
                         local newValue = configFunc()[sConfigName]
                         if type(newValue) == type(value) then
-                            cosuConf[sConfigName] = newValue
+                            options("set", sConfigName, newValue)
+                        elseif type(newValue) == "function" then
+                            if type(newValue())==type(value) then
+                                options("set", sConfigName, newValue())
+                            else
+                                tWrongValues[#tWrongValues+1] = "\'"..sConfigName.. "\' expected \'"..type(value)..'\''
+                            end
                         elseif type(newValue) == "nil" then
                             bMissingValues = true
                         else
@@ -595,11 +651,10 @@ function options(event, ...)
                 if bMissingValues then
                     options("add missing")
                 end
-                if #tWrongValues > 0 then
-                    error("create",
-                        {"The following values in",
-                        '\''..sDir..".cosu.conf\'",
-                        "are wrong:"},
+                if #tWrongValues > 0 and not sPath:find(".cosu.conf") then
+                    error("create", "options",
+                        {"The following values are wrong in",
+                        '\''..sDir..".cosu.conf\':"},
                         {table.unpack(tWrongValues)}
                     )
                 end
@@ -615,11 +670,38 @@ function options(event, ...)
             f.write( "return "..textutils.serialize(cosuConf) )
             f.close()
         end
-        local tabId = multishell.launch(_ENV,
-            shell.getRunningProgram(),
-            sDir..".cosu.conf"
-        )
-        multishell.setTitle(tabId, "[options]-cosu")
+        if multishell then
+            local tabId = multishell.launch(_G,
+                shell.getRunningProgram(),
+                sDir..".cosu.conf"
+            )
+            multishell.setTitle(tabId, "[options]-cosu")
+        else
+            if bSaved or tSubArgs[1] == "force" then
+                tContent = { }
+                tArgs  = { sDir..".cosu.conf" }
+                init()
+                tCursor.x,tCursor.y = 1,1
+                tScroll = { ['x']=0,['y']=0 }
+                return
+            end
+            table.insert(tPopup, 1, {
+                ["status"] = true,
+                ["name"] = "Options - Ask",
+                ["size"] = {
+                    ['x'] = nil,
+                    ['y'] = nil
+                },
+                ["text"] = {
+                    { "Edit Options,", "WITHOUT SAVING project?" }
+                },
+                ["button"] = {
+                    { ['x']=15, ['y']=4, ["label"]="Back", ["status"]=false, ["func"]=function() options("close") end },
+                    { ['x']=20, ['y']=4, ["label"]="Edit", ["status"]=false, ["func"]=function() options("close") options("create", "force") end }
+                }
+            })
+            tCursor.selectedItem = 1
+        end
     end
 end
 
@@ -649,11 +731,110 @@ function exit(event, ...)
                 { "Do you really want to exit,", "without saving?" }
             },
             ["button"] = {
-                { ['x']=22, ['y']=4, ["label"]="No", ["status"]=false, ["func"]=function() exit("close") end },
-                { ['x']=25, ['y']=4, ["label"]="Yes", ["status"]=false, ["func"]=function() exit("JUST DO IT") end }
+                { ['x']=21, ['y']=4, ["label"]="No", ["status"]=false, ["func"]=function() exit("close") end },
+                { ['x']=24, ['y']=4, ["label"]="Exit", ["status"]=false, ["func"]=function() exit("JUST DO IT") end }
             }
         })
         tCursor.selectedItem = 1
+    end
+end
+
+function specialChar(event, ...)
+    if event == "close" then
+        for index,pop in pairs(tPopup) do
+            if pop.name == "Special Chars" then
+                table.remove(tPopup, index)
+            end
+        end
+    elseif event == "create" then
+        local tNewPopup = {
+            ["blockControlls"]=true,
+            ["closeAtNoFokus"] = function(self)
+                local icon = self.list[1].content[self.list[1].selected]
+                for type,widget in  pairs(tWidgets) do
+                    if widget.name == "specialChar" then
+                        if icon ~= type then
+                            tWidgets[icon] = widget
+                            tWidgets[type] = nil
+                            break
+                        end
+                    end
+                end
+                input.insert.char(icon)
+            end,
+            ["key"]=function(self, id,_)
+                if self.list[1].type == "sidebyside" then
+                    if id == cosuConf.tKeyboard.up and (self.list[1].selected-self.list[1].size.x-1) > 0 then
+                        self.list[1].selected = self.list[1].selected-self.list[1].size.x-1
+                    elseif id == cosuConf.tKeyboard.down and (self.list[1].selected+(self.list[1].size.x+1)) < self.list[1].size.max then
+                        self.list[1].selected = self.list[1].selected+(self.list[1].size.x+1)
+                    end
+                end
+                if id == cosuConf.tKeyboard.left and self.list[1].selected>1 then
+                    self.list[1].selected = self.list[1].selected-1
+                elseif id == cosuConf.tKeyboard.right and self.list[1].selected<self.list[1].size.max then
+                    self.list[1].selected = self.list[1].selected+1
+                end
+            end,
+            ["status"] = true,
+            ["name"] = "Special Chars",
+            ['x']=w-17,['y']=2,
+            ["size"] = {
+                ['x'] = 15,
+                ['y'] = 7,
+                ["max"] = 9
+            },
+            ["list"] = {
+                {
+                    ["type"]="sidebyside",
+                    ['x']=1,['y']=1,
+                    ["size"] = {
+                        ['x'] = 14,
+                        ['y'] = 7
+                    },
+                    ["selected"]=3,
+                    ["content"]={ }
+                }
+            },
+            ["button"] = {
+                { ['x']=1, ['y']=1, ["label"]="", ["status"]=false, ["func"]=function(self) self:closeAtNoFokus() specialChar("close") end },
+            }
+        }
+        local nSelected = 0
+        for type,widget in  pairs(tWidgets) do
+            if widget.name == "specialChar" then
+                nSelected = string.byte(type)
+                break
+            end
+        end
+        for i=0,32 do
+            if nSelected == i then
+                tNewPopup.list[1].selected = #tNewPopup.list[1].content+1
+            end
+            tNewPopup.list[1].content[#tNewPopup.list[1].content+1] = string.char(i)
+        end for i=127,191 do
+            if nSelected == i then
+                tNewPopup.list[1].selected = #tNewPopup.list[1].content+1
+            end
+            tNewPopup.list[1].content[#tNewPopup.list[1].content+1] = string.char(i)
+        end for _,i in pairs({198,208,216,222,230,247,254}) do
+            if nSelected == i then
+                tNewPopup.list[1].selected = #tNewPopup.list[1].content+1
+            end
+            tNewPopup.list[1].content[#tNewPopup.list[1].content+1] = string.char(i)
+        end
+        tNewPopup.list[1].size.max = #tNewPopup.list[1].content
+        table.insert(tPopup, 1, tNewPopup)
+        tCursor.selectedItem = 1
+    end
+end
+
+function openShell()
+    if shell.openTab then
+        local nTask = shell.openTab("shell")
+        if nTask then shell.switchTab(nTask) end
+        category.reset()
+    else error("create", "multishell", {"The Multishell API is required,","to run a shell in a new tab!","(only available for advanced-PCs!)"})
     end
 end
 
@@ -678,6 +859,20 @@ local tToolbar = {
         ["About"]=function() info("create") end,
         ["Help"]=function() help("create") end}
     }}
+}
+tWidgets = {
+    ["\002"] = {
+        ["name"]="specialChar",
+        ['color']=term.isColor() and colors.lime or colors.white,
+        ["func"]=function() specialChar("create") end,
+        ["shourtcut"]=cosuConf.tKeyboard.F_SpChar
+    },
+    [">_"] = {
+        ["name"]="openShell",
+        ['color']=term.isColor() and colors.yellow or colors.white,
+        ["func"]=openShell,
+        ["shourtcut"]=cosuConf.tKeyboard.F_NewShell
+    }
 }
 
 function category.reset()
@@ -841,6 +1036,7 @@ local fTerm={
     ["getBackgroundColor"]=nTerm.getBackgroundColor,
     ["setTextColor"]=nTerm.setTextColor,
     ["getTextColor"]=nTerm.getTextColor,
+    ["setCursorBlink"]=nTerm.setCursorBlink,
     ["clear"]=function()
         local nW,nH=nTerm.getSize()
         
@@ -976,18 +1172,27 @@ function draw.cursor()
     end
 end
 
-function draw.popup(popup)
+function draw.popup(popup,index)
     if not popup.status then return end
     --[[ Get size ]]
-    local size = { ['w']=0, ['h']=1 }
-    for _,tBlock in pairs(popup.text) do
-        for _,sLine in pairs(tBlock) do
-            size.h = size.h + 1
-            if #sLine > size.w then
-                size.w = #sLine
+    local size = { ['w']=popup.size.x or 0, ['h']=popup.size.y or 1 }
+    if type(popup.size.y) == "nil" or type(popup.size.x) == "nil" then
+        if popup.text then
+            for _,tBlock in pairs(popup.text) do
+                for _,sLine in pairs(tBlock) do
+                    size.h = size.h + 1
+                    if #sLine > size.w then
+                        size.w = #sLine
+                    end
+                end
+                size.h = size.h + 1
             end
+        elseif popup.textBox then
+            size.h = 3
+            size.w = #popup.textBox.input
         end
-        size.h = size.h + 1
+        tPopup[index].size.x = size.w
+        tPopup[index].size.y = size.h
     end
     --[[ Define X & Y pos, if not present ]]    
     if type(popup.x or popup.y) == "nil" then
@@ -1016,15 +1221,17 @@ function draw.popup(popup)
     draw.switchFGBG(colorMatch["popupFont"], colorMatch["popupBG"])
     sBuffer = ("\140"):rep(size.w)
     local lCount = 0
-    for _,tBlock in pairs(popup.text) do
-        for _,sLine in pairs(tBlock) do
+    if type(popup.text)=="table" then
+        for _,tBlock in pairs(popup.text) do
+            for _,sLine in pairs(tBlock) do
+                lCount = lCount + 1
+                term.setCursorPos(popup.x+1, popup.y+lCount)
+                term.write(sLine)
+            end
             lCount = lCount + 1
             term.setCursorPos(popup.x+1, popup.y+lCount)
-            term.write(sLine)
+            term.write(sBuffer)
         end
-        lCount = lCount + 1
-        term.setCursorPos(popup.x+1, popup.y+lCount)
-        term.write(sBuffer)
     end
     --[[ Button(s) ]]
     local nItems = 0
@@ -1049,7 +1256,26 @@ function draw.popup(popup)
             term.write(tTB.input:sub(-size.w-tTB.x+1))
             if tTB.status or nIndex+nItems == tCursor.selectedItem then draw.switchFGBG() end
         end
-        inProgress(tCursor.selectedItem > #popup.button)
+        inProgress((tCursor.selectedItem > #popup.button))
+    end
+    --[[ List ]]
+    if type(popup.list)=="table" then
+        for _,list in pairs(popup.list) do
+            local nPosX,nPosY=0,0
+            for i,item in pairs(list.content) do
+                term.setCursorPos(popup.x+list.x+nPosX, popup.y+list.y+nPosY)
+                draw.switchFGBG(
+                    (i==list.selected) and colorMatch.special   or colorMatch.text,
+                    (i==list.selected) and colorMatch.popupFont or colorMatch.popupFrame
+                )
+                term.write(item)
+                nPosX = nPosX+#item
+                if nPosX>list.size.x then
+                    nPosY = nPosY+1
+                    nPosX = 0
+                end
+            end
+        end
     end
 end
 
@@ -1149,6 +1375,20 @@ function draw.toolbar()
             term.setCursorPos(nX+#contentCategory.name+2, 1)
         end
     end
+    --[[ Widgets ]]
+    local nLen = 1
+    term.setCursorPos(w,1)
+    draw.switchFGBG(cosuConf.cAccentColor, colorMatch.bg)
+    term.write('\138')
+    for name,meta in pairs(tWidgets) do
+        draw.switchFGBG(meta.color, colorMatch.bg)
+        term.setCursorPos(w-(nLen+#tostring(name)),1)
+        nLen = nLen+#tostring(name)+1
+        term.write(' '..name)
+    end
+    term.setCursorPos(w-nLen+1,1)
+    draw.switchFGBG(cosuConf.cAccentColor, colorMatch.bg)
+    term.write('\133')
 end
 
 function draw.infobar()
@@ -1178,15 +1418,15 @@ function draw.infobar()
     term.write("[")
     term.setTextColor(colors.white)
     term.write(size)
-    term.setTextColor(colors.lightGray)
+    term.setTextColor(colorMatch.cAccentText)
     term.write(sizeType)
     term.setTextColor(colorMatch["special"])
     term.write("]  ")
-    term.setTextColor(colors.lightGray)
+    term.setTextColor(colorMatch.cAccentText)
     term.write("Ln ")
     term.setTextColor(colors.white)
     term.write(tCursor.y)
-    term.setTextColor(colors.lightGray)
+    term.setTextColor(colorMatch.cAccentText)
     term.write(",Col ")
     term.setTextColor(colors.white)
     term.write(tCursor.x)
@@ -1209,21 +1449,23 @@ end
 function draw.handler()
     term.setCursorBlink(false)
     term=fTerm
+
     draw.content()
     --[[ bars ]]
     draw.toolbar()
     draw.infobar()
+    --[[ Draw popup if exists ]]
+    for i=#tPopup,1,-1 do
+        draw.popup(tPopup[i],i)
+    end
+
     term=nTerm
     fTerm.render()
     term.setCursorBlink(true)
-    --[[ Draw popup if exists ]]
-    for i=#tPopup,1,-1 do
-        draw.popup(tPopup[i])
-    end
 end
 
 
-local input = { handle = {}, insertAuto = {}, insert = {}, toolbar = {}, menu = {} }
+input = { handle = {}, insertAuto = {}, insert = {}, toolbar = {}, menu = {} }
 --[[ +++ Input functions +++ ]]
 function input.insert.cursorVertical(sWay, bJump)
     if sWay == "up" then
@@ -1311,8 +1553,8 @@ function input.insert.char(sChar,bCloseBrackets)
         end
         sChar=sChar..sSubChar
     end
-    if tCursor.y-tScroll.y+1 < 1 or tCursor.y-tScroll.y+1 > h then
-        tScroll.y = tCursor.y + h/2
+    if tCursor.y-tScroll.y+1 < 1 then
+        tScroll.y = tCursor.y - math.floor(h/2)
     end
     local sLine = tContent[tCursor.y]
     if sChar == "\000" then
@@ -1409,7 +1651,7 @@ function input.menu.cursorEnter()
         for nIndex,tB in pairs(tPopup[1].button) do
             if tCursor.selectedItem == nItems+nIndex then
                 if type(tB.func) == "function" then
-                    tB.func()
+                    tB.func(tPopup[1])
                 end
                 break
             end
@@ -1447,19 +1689,20 @@ end
 
 function input.menu.cursorHorizontal(sWay)   
     local nItems = 0
+    if tPopup[1].blockControlls then return end
     if type(tPopup[1].textBox) == "table" then
         nItems = #tPopup[1].textBox
     end
     if sWay == "left" then
         if tCursor.selectedItem > 1 then
             tCursor.selectedItem = tCursor.selectedItem-1
-        else
+        elseif cosuConf.bJumpAtEndToBegin then
             tCursor.selectedItem = #tPopup[1].button+nItems
         end
     elseif sWay == "right" then
         if tCursor.selectedItem < #tPopup[1].button+nItems then
             tCursor.selectedItem = tCursor.selectedItem+1
-        else
+        elseif cosuConf.bJumpAtEndToBegin then
             tCursor.selectedItem = 1
         end
     end
@@ -1481,6 +1724,12 @@ function input.menu.mouseScroll(nScroll)
     end
 end
 
+function input.menu.key(nID,bPressed)
+    if type(tPopup[1])=="table" and type(tPopup[1].key)=="function" then
+        tPopup[1]:key(nID,bPressed)
+    end
+end
+
 function input.menu.mouseClick(nButton, nX, nY)
     if nButton == 1 then
         --[[ Button ]]
@@ -1497,21 +1746,35 @@ function input.menu.mouseClick(nButton, nX, nY)
                 return
             end
         end
-        --[[ Get size of popup ]]
-        local size = { ['w']=0 }
-        for _,tBlock in pairs(tPopup[1].text) do
-            for _,sLine in pairs(tBlock) do
-                if #sLine > size.w then
-                    size.w = #sLine
-                end
-            end
-        end
         --[[ TextBox ]]
         if type(tPopup[1].textBox) == "table" then
             for nIndex,tTB in pairs(tPopup[1].textBox) do
-                if nX >= tPopup[1].x+tTB.x and nX < tPopup[1].x+tTB.x+size.w and nY == tPopup[1].y+tTB.y then
+                if nX >= tPopup[1].x+tTB.x and nX < tPopup[1].x+tTB.x+tPopup[1].size.x and nY == tPopup[1].y+tTB.y then
                    tCursor.selectedItem = nIndex
                end
+            end
+        end
+        --[[ List ]]
+        if type(tPopup[1].list)=="table" then
+            for _,list in pairs(tPopup[1].list) do
+                if nX >= tPopup[1].x+list.x and nX < tPopup[1].x+list.x+tPopup[1].size.x then
+                    if nY >= tPopup[1].y+list.y and nY < tPopup[1].y+list.y+tPopup[1].size.y then
+                        if list.type == "sidebyside" then
+                            local nSubX,nSubY = nX-tPopup[1].x, nY-tPopup[1].y
+                            list.selected = nSubX + (nSubY-1)*(list.size.x+1)
+                        end
+                    end
+                end
+            end
+        end
+        --[[ Close? ]]
+        if tPopup[1].closeAtNoFokus then
+            if nX < tPopup[1].x or nX >= tPopup[1].x+2+tPopup[1].size.x
+            or nY < tPopup[1].y or nY >= tPopup[1].y+2+tPopup[1].size.y then
+                if type(tPopup[1].closeAtNoFokus)=="function" then
+                    tPopup[1]:closeAtNoFokus(1)
+                end
+                tPopup[1] = nil
             end
         end
     end
@@ -1536,13 +1799,13 @@ function input.toolbar.cursorHorizontal(sWay)
     if sWay == "left" then
         if bSelected > 1 then
             tToolbar[bSelected-1].status = true
-        else
+        elseif cosuConf.bJumpAtEndToBegin then
             tToolbar[#tToolbar].status = true
         end
     elseif sWay == "right" then
         if bSelected < #tToolbar then
             tToolbar[bSelected+1].status = true
-        else
+        elseif cosuConf.bJumpAtEndToBegin then
             tToolbar[1].status = true
         end
     end
@@ -1595,6 +1858,15 @@ function input.toolbar.mouseClick(nButton, nX, nY)
             else
                 contentCategory.status = false
             end
+        end
+        local nLen = 0
+        for sName,fWidget in pairs(tWidgets) do
+            local nBegin = w-(nLen+#tostring(sName))
+            if nX>=nBegin and nX<nBegin+#sName then
+                if type(fWidget)=="table" and type(fWidget.func)=="function" then fWidget.func() end
+                break
+            end
+            nLen = nLen+#tostring(sName)+1
         end
         if isUsed then mode = "toolbar"
         else mode = "insert" end
@@ -1703,6 +1975,7 @@ function input.insert.mouseScroll(nScroll)
 end
 
 function input.handle.insert(event)
+    tActiveKeys[event[2]] = (event[1] == "key")
     if event[2] == keys.leftAlt then
         tActiveKeys[keys.leftAlt] = (event[1] == "key")
         return
@@ -1711,15 +1984,19 @@ function input.handle.insert(event)
         return
     end
     if event[1] == "key" then
-        if event[2] == keys.up and type(input[mode].cursorVertical) == "function" then
+        if type(input.menu.key)=="function" then
+            input.menu.key(event[2],event[3])
+        end
+
+        if event[2] == cosuConf.tKeyboard.up and type(input[mode].cursorVertical) == "function" then
             input[mode].cursorVertical("up", tActiveKeys["CTRL"])
-        elseif event[2] == keys.down and type(input[mode].cursorVertical) == "function" then
+        elseif event[2] == cosuConf.tKeyboard.down and type(input[mode].cursorVertical) == "function" then
             input[mode].cursorVertical("down", tActiveKeys["CTRL"])
-        elseif event[2] == keys.left and type(input[mode].cursorHorizontal) == "function" then
+        elseif event[2] == cosuConf.tKeyboard.left and type(input[mode].cursorHorizontal) == "function" then
             input[mode].cursorHorizontal("left", tActiveKeys["CTRL"])
-        elseif event[2] == keys.right and type(input[mode].cursorHorizontal) == "function" then
+        elseif event[2] == cosuConf.tKeyboard.right and type(input[mode].cursorHorizontal) == "function" then
             input[mode].cursorHorizontal("right", tActiveKeys["CTRL"])
-        elseif event[2] == keys.tab then
+        elseif event[2] == cosuConf.tKeyboard.tab then
             if type(input[mode].tab) == "function" then
                 input[mode].tab()
             elseif mode == "insert" then
@@ -1728,12 +2005,47 @@ function input.handle.insert(event)
                 input.insert.char(tAutoCompleteList[tCursor.autoListY+1],true)
                 tCursor.autoListY = 0
             end
-        elseif event[2] == keys.delete and type(input[mode].cursorDelete) == "function" then
+        elseif event[2] == cosuConf.tKeyboard.delete and type(input[mode].cursorDelete) == "function" then
             input[mode].cursorDelete()
-        elseif event[2] == keys.backspace and type(input[mode].cursorBackspace) == "function" then
+        elseif event[2] == cosuConf.tKeyboard.backspace and type(input[mode].cursorBackspace) == "function" then
             input[mode].cursorBackspace()
-        elseif (event[2] == keys.enter or event[2] == keys.numPadEnter) and type(input[mode].cursorEnter) == "function" then
+        elseif event[2] == cosuConf.tKeyboard.enter and type(input[mode].cursorEnter) == "function" then
             input[mode].cursorEnter()
+        
+        elseif event[2] == cosuConf.tKeyboard.F_Help and mode ~= "menu" then
+            help("create")
+        elseif event[2] == cosuConf.tKeyboard.F_Run then
+            file("execute")
+        else
+            -- CTRL combinations
+            if tActiveKeys["CTRL"] then
+                local sExecute = ""
+                for _,key in pairs(cosuConf.tKeyboard.CTRL) do
+                    if type(key[2])=="number" and tActiveKeys[key[2]] then
+                        sExecute = key[1]
+                        break
+                    elseif type(key[2])=="table" then
+                        sExecute = key[1]
+                        for _,subkey in pairs(key[2]) do
+                            if not tActiveKeys[subkey] then
+                                sExecute = ""
+                                break
+                            end
+                        end
+                        if #sExecute > 0 then break end
+                    end
+                end
+                if sExecute == "NewFile" then       file("create", "new")
+                elseif sExecute == "SaveAs" then    file("create", "save as")
+                elseif sExecute == "Save" then      file("create", "save")
+                end
+            end
+            -- Widgets
+            for _,widget in pairs(tWidgets) do
+                if widget.shourtcut == event[2] and type(widget.func) == "function" then
+                    widget.func()
+                end
+            end
         end
 
         if tCursor.x-tScroll.x < 1 or tCursor.x-tScroll.x > w then
@@ -1753,8 +2065,7 @@ function input.handle.mouse(event)
     end
 end
 
-local tArgs = { ... }
-local function init()
+function init()
     --[[ Check args ]]
     if #tArgs > 0 then
         --[[ Collect file informations ]]
@@ -1883,14 +2194,15 @@ parallel.waitForAny(
 
 --[[ Clear mess ]]
 local sDir = '/'..fs.getDir(shell.getRunningProgram())..'/'
-fs.delete(sDir..".tmp"..multishell.getCurrent())
+local sCurID = tostring( (type(multishell)~="nil") and multishell.getCurrent() or "" )
+fs.delete(sDir..".tmp"..sCurID)
 
 
---[[ Msg if something went wrong  ]]
 term.setBackgroundColor(colors.black)
 term.setTextColor(colors.white)
 shell.run("clear")
 
+--[[ Msg if something went wrong  ]]
 if type(running) == "number" then
     if not bSaved then
         local type = "closed"
