@@ -114,7 +114,7 @@ local sGithub = {
     ["api"]="https://api.github.com/repos/1turtle/consult/releases/latest",
     ["latest"]="https://github.com/1Turtle/consult/releases/latest/download/cosu.lua"
 }
-local sVersion = "1.2.0"
+local sVersion = "1.2.1"
 local tArgs = { ... }
 local init = function() return end
 local sPath = ""
@@ -921,7 +921,7 @@ end
 
 function category.openByChar(char)
     category.reset()
-    for index,category in pairs(tToolbar) do
+    for _,category in pairs(tToolbar) do
         if category.name:sub(1,#char):lower() == char then
             category.status = true
             mode = "toolbar"
@@ -1987,6 +1987,14 @@ function input.handle.insert(event)
         if type(input.menu.key)=="function" then
             input.menu.key(event[2],event[3])
         end
+        -- For CraftOS-PC
+        if tActiveKeys[keys.leftAlt] then
+            local sKey = keys.getName(event[2])
+            if #sKey == 1 then
+                category.openByChar(sKey)
+                return
+            end
+        end
 
         if event[2] == cosuConf.tKeyboard.up and type(input[mode].cursorVertical) == "function" then
             input[mode].cursorVertical("up", tActiveKeys["CTRL"])
@@ -2111,6 +2119,7 @@ local function main()
     end
 
     if event[1] == "char" then
+        -- For CCEmuX
         if tActiveKeys[keys.leftAlt] then
             category.openByChar(event[2])
         else
