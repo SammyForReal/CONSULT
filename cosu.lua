@@ -25,6 +25,7 @@ cosuConf.cAccentColor = colors.blue
 cosuConf.bDoubleClickButton = false
 cosuConf.sTabSpace = "    " --[[ Normaly 4 spaces. ]]
 cosuConf.bJumpAtEndToBegin = true
+cosuConf.bShadows = true
 --[[ Color palette for .lua files ]]
 local colorMatch = { }
 colorMatch["popupBG"]=colors.lightGray
@@ -491,7 +492,7 @@ function file(event, ...)
             tCursor.selectedItem = 1
         elseif tArgs[1] == "new" then
             if multishell then
-                local tabId = multishell.launch(_G, shell.getRunningProgram())
+                local tabId = multishell.launch(_ENV, shell.getRunningProgram())
                 multishell.setTitle(tabId, "cosu")
                 multishell.setFocus(tabId)
                 category.reset()
@@ -544,7 +545,7 @@ function file(event, ...)
         end print("Press any key to exit") os.pullEventRaw("key") ]])
         f.close()
         if multishell then
-            local nID = multishell.launch(_G, sDir..".tmp"..sCurID, ...)
+            local nID = multishell.launch(_ENV, sDir..".tmp"..sCurID, ...)
             multishell.setTitle(nID, "[run]-cosu")
             multishell.setFocus(nID)
         else
@@ -671,7 +672,7 @@ function options(event, ...)
             f.close()
         end
         if multishell then
-            local tabId = multishell.launch(_G,
+            local tabId = multishell.launch(_ENV,
                 shell.getRunningProgram(),
                 sDir..".cosu.conf"
             )
@@ -1172,6 +1173,56 @@ function draw.cursor()
     end
 end
 
+function draw.dropdownBG(nW,nH, nX, nY, tLineBreaks)
+    --[[ Set size ]]
+    local nPopX, nPopY = nX, nY
+    if type(nX) == "nil" then nPopX = (w/2)-(nW+2)/2+1
+    end if type(nY) == "nil" then nPopY = (h/2)-(nH+2)/2+1
+    end
+    --[[ Draw main ]]
+    draw.switchFGBG(colorMatch["popupFrame"], colorMatch["popupBG"])
+    for y=1,nH do
+        term.setCursorPos(nPopX, nPopY+y)
+        local sLeft, sFiller, sRight = "\149", " ", "\149"
+        if y == 1 then
+            --[[ Top border ]]
+            sLeft="\151"  sFiller="\131"  sRight="\148"
+        elseif y == nH then
+            --[[ Buttom border ]]
+            sLeft="\138"  sFiller="\143"  sRight="\133"
+            draw.switchFGBG()
+        end
+        term.write( sLeft..(sFiller):rep(nW) )
+        if y ~= nH then draw.switchFGBG() end
+        term.write(sRight)
+        draw.switchFGBG()
+    end
+    --[[ Draw line breaks ]]
+    if type(tLineBreaks) ~= "table" then return end
+    for i=1,#tLineBreaks do
+        term.setCursorPos(nPopX, nPopY+tLineBreaks[i]+1)
+        term.write("\157".. ("\140"):rep(nW) )
+        draw.switchFGBG()
+        term.write("\145")
+        draw.switchFGBG()
+    end
+    --[[ Shadow ]]
+    if cosuConf.bShadows then
+        draw.switchFGBG(colorMatch.popupFrame, colorMatch.bg)
+        local char = ''
+        for i=1,nH do
+            term.setCursorPos(nPopX+nW+2,nPopY+1+i)
+            char = (type(tContent[i+tScroll.y+1])=="string") and '\127' or ' '
+            term.write(char)
+        end
+        char = (type(tContent[tScroll.y+nPopY+nH+1])=="string") and '\127' or ' '
+        for i=1,nW+1 do
+            term.setCursorPos(nPopX+i,nPopY+nH+1)
+            term.write(char)
+        end
+    end
+end
+
 function draw.popup(popup,index)
     if not popup.status then return end
     --[[ Get size ]]
@@ -1201,22 +1252,7 @@ function draw.popup(popup,index)
     end
     --[[ Border/BG ]]
     draw.switchFGBG(colorMatch["popupFrame"], colorMatch["popupBG"])
-    for y=1,size.h+2 do
-        term.setCursorPos(popup.x, popup.y+y-1)
-        local sLeft, sFiller, sRight = "\149", " ", "\149"
-        if y == 1 then
-            --[[ Top border ]]
-            sLeft="\151"  sFiller="\131"  sRight="\148"
-        elseif y == size.h+2 then
-            --[[ Buttom border ]]
-            sLeft="\138"  sFiller="\143"  sRight="\133"
-            draw.switchFGBG()
-        end
-        term.write( sLeft..(sFiller):rep(size.w) )
-        if y ~= size.h+2 then draw.switchFGBG() end
-        term.write(sRight)
-        draw.switchFGBG()
-    end
+    draw.dropdownBG(size.w,size.h+2, popup.x,popup.y-1,{})
     --[[ Text (& Line breaks) ]]
     draw.switchFGBG(colorMatch["popupFont"], colorMatch["popupBG"])
     sBuffer = ("\140"):rep(size.w)
@@ -1276,41 +1312,6 @@ function draw.popup(popup,index)
                 end
             end
         end
-    end
-end
-
-function draw.dropdownBG(nW,nH, nX, nY, tLineBreaks)
-    --[[ Set size ]]
-    local nPopX, nPopY = nX, nY
-    if type(nX) == "nil" then nPopX = (w/2)-(nW+2)/2+1
-    end if type(nY) == "nil" then nPopY = (h/2)-(nH+2)/2+1
-    end
-    --[[ Draw main ]]
-    draw.switchFGBG(colorMatch["popupFrame"], colorMatch["popupBG"])
-    for y=1,nH do
-        term.setCursorPos(nPopX, nPopY+y)
-        local sLeft, sFiller, sRight = "\149", " ", "\149"
-        if y == 1 then
-            --[[ Top border ]]
-            sLeft="\151"  sFiller="\131"  sRight="\148"
-        elseif y == nH then
-            --[[ Buttom border ]]
-            sLeft="\138"  sFiller="\143"  sRight="\133"
-            draw.switchFGBG()
-        end
-        term.write( sLeft..(sFiller):rep(nW) )
-        if y ~= nH then draw.switchFGBG() end
-        term.write(sRight)
-        draw.switchFGBG()
-    end
-    --[[ Draw line breaks ]]
-    if type(tLineBreaks) ~= "table" then return end
-    for i=1,#tLineBreaks do
-        term.setCursorPos(nPopX, nPopY+tLineBreaks[i]+1)
-        term.write("\157".. ("\140"):rep(nW) )
-        draw.switchFGBG()
-        term.write("\145")
-        draw.switchFGBG()
     end
 end
 
@@ -2172,31 +2173,31 @@ parallel.waitForAny(
     end,
     --[[ BG tasks ]]
     function()
-        parallel.waitForAll(
-            function()
-                while running==true do
-                    for _,sLine in pairs(tContent) do
+        --[[ Check updates ]]
+        if update("check") then
+            for i,category in pairs(tToolbar) do
+                if category.name == "Info" then
+                    tToolbar[i].content[1]["Update"]=function() update("create") end
+                    tWidgets['\019'] = {
+                        ["name"]="update",
+                        ['color']=term.isColor() and colors.red or colors.lightGray,
+                        ["func"]=function() update("create") end,
+                        ["shourtcut"]=-1
+                    }
+                end
+            end
+        end
+        while running==true do
+            for _,sLine in pairs(tContent) do
                         if sLine:find("require") or sLine:find("os.loadAPI") or sLine:find("peripheral") then
                             loadAPIVirtual(sLine)
                         end
-                    end
-                    if #tContent > 100 then
-                        sleep(4)
-                    else sleep(0.5)
-                    end
-                end
-            end,
-            function()
-                --[[ Check updates ]]
-                if update("check") then
-                    for i,category in pairs(tToolbar) do
-                        if category.name == "Info" then
-                            tToolbar[i].content[1]["Update"]=function() update("create") end
-                        end
-                    end
-                end
             end
-        )
+            if #tContent > 100 then
+                        sleep(4)
+            else sleep(0.5)
+            end
+        end
     end
 )
 
