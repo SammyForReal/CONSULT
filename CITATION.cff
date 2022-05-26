@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+title: CONSULT
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Sammy L.
+    family-names: Koch
+    email: sammykoch2004@gmail.com
+repository-code: 'https://github.com/1Turtle/consult'
+abstract: >-
+  A modern & easy to use Lua Editor, written for
+  CraftOS!
+license: MIT
