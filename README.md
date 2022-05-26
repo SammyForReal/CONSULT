@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="650px" alt="icon" src="./docs/icon.png">
+  <img width="260px" alt="icon" src="./docs/icon.png">
 </p>
 
 <h1 align="center">CONSULT | cosu</h1>
@@ -7,8 +7,8 @@
 
 About
 -----
-CONSULT is designed to run on as many emulators as possible! It's also compatible with non-advanced PCs, which means it also can be used with the keyboard only, allowing a faster workflow too.
-<img alt="screenshot" src="./docs/preview.png">
+CONSULT is designed to run on as many emulators as possible! It's also compatible with non-advanced PCs, which means it also can be used with the keyboard only, allowing a faster workflow too. </br>
+<p align="center"> <img alt="screenshot" src="./docs/preview.png"></p>
 
 Installation
 ------------
