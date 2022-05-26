@@ -20,4 +20,4 @@ Nothing needs to be set up in advance + it is completely portable!
 
 How to use or modify?
 ---------------------
-To find out more, check out the wiki section!
+To find out more, check out the [wiki section](https://github.com/1Turtle/consult/wiki)!
