@@ -1,36 +1,23 @@
-# CONSULT
-A modern Lua editor for Craft-OS!
+<p align="center">
+  <img width="650px" alt="icon" src="./docs/icon.png">
+</p>
 
-Download
---------
-To get **Consult**, run the following command:
-```
-wget https://github.com/1Turtle/consult/releases/latest/download/cosu.lua
-```
->👉 Note: The program got only tested for [CC:T](https://tweaked.cc/)
->
+<h1 align="center">CONSULT | cosu</h1>
+<b><p align="center">A modern & easy to use Lua Editor, written for CraftOS!</p></b>
+
 About
 -----
-It makes programming in Craft-OS much more enjoyable with its **optimizations** for the mouse and keyboard!<br>
-Moreover, it comes with an **helpful overlay** that is close to those of nowadays and presents a lot of useful information.<br>
-![Screenshot](/screenshot.png "Screenshot of Consult")
+CONSULT is designed to run on as many emulators as possible! It's also compatible with non-advanced PCs, which means it also can be used with the keyboard only, allowing a faster workflow too.
+<img alt="screenshot" src="./docs/preview.png">
 
-Features
---------
-Here are some features that this editor brings to the table:<br>
-* **Auto completion**
-  * **Accurate API autocompletion list** *(that got defined with 'require',  'os.loadAPI' or 'peripheral. find/wrap')*
-  * Displayed as small search-list
-* **Display**
-  * New color highlighting
-  * **Dropdowns/Popups** for friendly usage
-  * File size in kb/mb
-  * Current line and column position
-* **Options**
-  * Tabspace
-  * Accent color *(toolbar, infobar or buttons)*
-  * Cursor as Block *(currently beta)*
+Installation
+------------
+To get CONSULT, run the following command to download the cosu.lua file:
+```sh
+wget https://github.com/1Turtle/consult/releases/latest/download/cosu.lua
+```
+Nothing needs to be set up in advance + it is completely portable!
 
-Reminder
---------
-Please keep in mind that the program is still **far from perfection**. Some features will be added soon(tm) or are currently disabled. There could be unexpected **errors**, which in the worst case can lead to the loss of newly made changes in files! Therefore, **save regularly** and _please_ upload **[bug reports](https://github.com/1Turtle/consult/issues)**!
+How to use or modify?
+---------------------
+To find out more, check out the wiki section!
