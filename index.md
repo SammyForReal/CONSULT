@@ -7,7 +7,7 @@
 
 About
 -----
-CONSULT is designed to run on as many emulators as possible! It's also compatible with non-advanced PCs, which means it also can be used with the keyboard only, allowing a faster workflow too. </br>
+CONSULT is designed to run on as many emulators as possible! It's also compatible with non-advanced PCs, which means it also can be used with the keyboard only, allowing a faster workflow too.  
 <p align="center"> <img alt="screenshot" src="./preview.png"></p>
 
 Installation
