@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">CONSULT | cosu</h1>
-<b><p align="center">A modern & easy to use Lua Editor, written for CraftOS!</p></b>
+<b align="center">A modern & easy to use Lua Editor, written for CraftOS!</b>
 
 About
 -----
