@@ -23,7 +23,7 @@ cosuConf.tKeyboard = {
 cosuConf.bCursorIsBlock = false
 cosuConf.cAccentColor = colors.blue
 cosuConf.bDoubleClickButton = false
-cosuConf.sTabSpace = "    " --[[ Normaly 4 spaces. ]]
+cosuConf.nTabSpace = 4 --[[ Normaly 4 spaces. ]]
 cosuConf.bJumpAtEndToBegin = true
 cosuConf.bShadows = true
 --[[ Color palette for .lua files ]]
@@ -43,6 +43,8 @@ if term.isColor() then
     colorMatch["string"] = colors.green
     colorMatch["special"] = colors.yellow
     colorMatch["text"] = colors.white
+    colorMatch["positive"] = colors.lime
+    colorMatch["negative"] = colors.red
 else
     cosuConf.cAccentColor = colors.gray
     colorMatch["bg"] = colors.black
@@ -55,6 +57,8 @@ else
     colorMatch["string"] = colors.lightGray
     colorMatch["special"] = colors.white
     colorMatch["text"] = colors.white
+    colorMatch["positive"] = colors.white
+    colorMatch["negative"] = colors.lightGray
 end
 
 
@@ -115,7 +119,7 @@ local sGithub = {
     ["api"]="https://api.github.com/repos/1turtle/consult/releases/latest",
     ["latest"]="https://github.com/1Turtle/consult/releases/latest/download/cosu.lua"
 }
-local sVersion = "1.2.1"
+local sVersion = "1.3.0"
 local tArgs = { ... }
 local init = function() return end
 local sPath = ""
@@ -134,6 +138,8 @@ local bSaved = true
 local category = { }
 local tWidgets = { }
 local input = {}
+local blits = {[1]='0',[2]='1',[4]='2',[8]='3',[16]='4',[32]='5',[64]='6',[128]='7',[256]='8',[512]='9',[1024]='a',[2048]='b',[4096]='c',[8192]='d',[16384]='e',[32768]='f' }
+local blitInvert = {['0']=1,['1']=2,['2']=4,['3']=8,['4']=16,['5']=32,['7']=128,['8']=256,['9']=512,['a']=1024,['b']=2048,['c']=4096,['d']=8192,['e']=16384,['f']=32768 }
 
 
 --[[ +++ Other functions +++ ]]
@@ -200,7 +206,7 @@ function update(event, ...)
     elseif event == "check" then
         --[[ Check updates ]]
         if http then
-            local gitAPI=http.get(sGithub.api,_G._GIT_API_KEY and {Authorization="token ".._G._GIT_API_KEY})
+            local gitAPI=http.get(sGithub.api)
             if gitAPI.getResponseCode()==200 then
                 local tGitContent = textutils.unserialiseJSON(gitAPI.readAll())
                 if tGitContent.tag_name ~= sVersion then
@@ -350,7 +356,7 @@ function help(event, ...)
                         "Text editor (for dummies) | (2/4)",
                     },{
                         "  the RIGHT of your cursor with [DELETE]. ",
-                        "* To place ("..#tostring(cosuConf.sTabSpace)..") spaces, use [TAB].",
+                        "* To place ("..tostring(cosuConf.nTabSpace)..") spaces, use [TAB].",
                         "* Autocorrect is on by default,",
                         "  when shown, press [TAB] to apply &",
                         "  navigate with [ARROW] keys.",
@@ -531,18 +537,13 @@ function file(event, ...)
             f.writeLine(sLine)
         end
         f.write("end local path=\""..sDir..".tmp"..sCurID.."\"")
-        f.write([[ local o,e=load(c)
-        if o then
-            o,e=pcall(o)
-        end
+        f.write([[ local o,e=pcall(c)
         if not o then
             term.setBackgroundColor(colors.black)
             term.setTextColor(colors.red)
             print(e)
             term.setTextColor(colors.white)
-            print("\nPress any key to exit.")
-            os.pullEvent("char")
-        end print("Press any key to exit") os.pullEventRaw("key") ]])
+        end print("Press any key to exit") os.pullEvent("key") ]])
         f.close()
         if multishell then
             local nID = multishell.launch(_ENV, sDir..".tmp"..sCurID, ...)
@@ -632,8 +633,9 @@ function options(event, ...)
                         end
                     )
                 if bSuccess then
+                    local newConfigs = configFunc()
                     for sConfigName,value in pairs(cosuConf) do
-                        local newValue = configFunc()[sConfigName]
+                        local newValue = newConfigs[sConfigName]
                         if type(newValue) == type(value) then
                             options("set", sConfigName, newValue)
                         elseif type(newValue) == "function" then
@@ -740,6 +742,8 @@ function exit(event, ...)
     end
 end
 
+--[[ Placeholder for new options :) ]]
+
 function specialChar(event, ...)
     if event == "close" then
         for index,pop in pairs(tPopup) do
@@ -788,6 +792,7 @@ function specialChar(event, ...)
             ["list"] = {
                 {
                     ["type"]="sidebyside",
+                    ["scrolled"]=1,
                     ['x']=1,['y']=1,
                     ["size"] = {
                         ['x'] = 14,
@@ -1024,7 +1029,6 @@ end
 
 
 --[[ +++ Draw functions +++ ]]
-local blits = {[1]='0',[2]='1',[4]='2',[8]='3',[16]='4',[32]='5',[64]='6',[128]='7',[256]='8',[512]='9',[1024]='a',[2048]='b',[4096]='c',[8192]='d',[16384]='e',[32768]='f' }
 local buf = {
     ["b"]={},
     ["f"]={},
@@ -1068,7 +1072,13 @@ local fTerm={
         nTerm.setCursorPos(nX+#str,nY)
         local cBg=blits[nTerm.getBackgroundColor()]:rep(#str)
         local cFg=blits[nTerm.getTextColor()]:rep(#str)
-        
+        if nY < 0 or nY > h then return end
+        if nX < 1 then
+            str = str:sub(2-nX)
+            cBg = cBg:sub(2-nX)
+            cFg = cFg:sub(2-nX)
+            nX = 1
+        end
         buf.b[nY]=buf.b[nY]:sub(1,nX-1).. cBg ..buf.b[nY]:sub(nX+#str)
         buf.f[nY]=buf.f[nY]:sub(1,nX-1).. cFg ..buf.f[nY]:sub(nX+#str)
         buf.t[nY]=buf.t[nY]:sub(1,nX-1).. str ..buf.t[nY]:sub(nX+#str)
@@ -1212,14 +1222,26 @@ function draw.dropdownBG(nW,nH, nX, nY, tLineBreaks)
         local char = ''
         for i=1,nH do
             term.setCursorPos(nPopX+nW+2,nPopY+1+i)
-            char = (type(tContent[i+tScroll.y+1])=="string") and '\127' or ' '
+            char = (type(tContent[nY+i+tScroll.y])=="string") and '\127' or ' '
             term.write(char)
         end
-        char = (type(tContent[tScroll.y+nPopY+nH+1])=="string") and '\127' or ' '
+        char = (type(tContent[nY+nH+tScroll.y])=="string") and '\127' or ' '
         for i=1,nW+1 do
             term.setCursorPos(nPopX+i,nPopY+nH+1)
             term.write(char)
         end
+    end
+end
+
+function draw.fText(text)
+    if text:find('{&') then
+        for word in string.gmatch(text, '([^{&]+)') do
+            term.setTextColor(blitInvert[word:sub(1,1):lower()] or colorMatch.popupFont)
+            term.write(word:sub(2))
+        end
+    else
+        term.setTextColor(colorMatch.popupFont)
+        term.write(text)
     end
 end
 
@@ -1228,7 +1250,7 @@ function draw.popup(popup,index)
     --[[ Get size ]]
     local size = { ['w']=popup.size.x or 0, ['h']=popup.size.y or 1 }
     if type(popup.size.y) == "nil" or type(popup.size.x) == "nil" then
-        if popup.text then
+        if type(popup.text)=="table" then
             for _,tBlock in pairs(popup.text) do
                 for _,sLine in pairs(tBlock) do
                     size.h = size.h + 1
@@ -1238,7 +1260,7 @@ function draw.popup(popup,index)
                 end
                 size.h = size.h + 1
             end
-        elseif popup.textBox then
+        elseif type(popup.textBox)=="table" then
             size.h = 3
             size.w = #popup.textBox.input
         end
@@ -1255,14 +1277,14 @@ function draw.popup(popup,index)
     draw.dropdownBG(size.w,size.h+2, popup.x,popup.y-1,{})
     --[[ Text (& Line breaks) ]]
     draw.switchFGBG(colorMatch["popupFont"], colorMatch["popupBG"])
-    sBuffer = ("\140"):rep(size.w)
+    local sBuffer = ("\140"):rep(size.w)
     local lCount = 0
     if type(popup.text)=="table" then
         for _,tBlock in pairs(popup.text) do
             for _,sLine in pairs(tBlock) do
                 lCount = lCount + 1
                 term.setCursorPos(popup.x+1, popup.y+lCount)
-                term.write(sLine)
+                draw.fText(sLine)
             end
             lCount = lCount + 1
             term.setCursorPos(popup.x+1, popup.y+lCount)
@@ -1275,11 +1297,13 @@ function draw.popup(popup,index)
         nItems = #popup.textBox
     end
     draw.switchFGBG(colorMatch["special"], cosuConf.cAccentColor)
-    for nIndex,tB in pairs(popup.button) do
-        term.setCursorPos(popup.x+tB.x,popup.y+tB.y)
-        if tB.status or nIndex+nItems == tCursor.selectedItem then draw.switchFGBG() end
-        term.write(tB.label)
-        if tB.status or nIndex+nItems == tCursor.selectedItem then draw.switchFGBG() end
+    if type(popup.button) == "table" then
+        for nIndex,tB in pairs(popup.button) do
+            term.setCursorPos(popup.x+tB.x,popup.y+tB.y)
+            if tB.status or nIndex+nItems == tCursor.selectedItem then draw.switchFGBG() end
+            term.write(tB.label)
+            if tB.status or nIndex+nItems == tCursor.selectedItem then draw.switchFGBG() end
+        end
     end
     --[[ TextBox ]]
     if type(popup.textBox) == "table" then
@@ -1290,7 +1314,7 @@ function draw.popup(popup,index)
             term.write((" "):rep(size.w-tTB.x+1))
             term.setCursorPos(popup.x+tTB.x,popup.y+tTB.y)
             term.write(tTB.input:sub(-size.w-tTB.x+1))
-            if tTB.status or nIndex+nItems == tCursor.selectedItem then draw.switchFGBG() end
+            if tTB.status or nIndex == tCursor.selectedItem then draw.switchFGBG() end
         end
         inProgress((tCursor.selectedItem > #popup.button))
     end
@@ -1298,19 +1322,58 @@ function draw.popup(popup,index)
     if type(popup.list)=="table" then
         for _,list in pairs(popup.list) do
             local nPosX,nPosY=0,0
+            draw.switchFGBG(colorMatch.text,colorMatch.popupFrame)
+            --if tTB.status or nIndex == tCursor.selectedItem then draw.switchFGBG() end
+            for y=1,list.size.y do
+                term.setCursorPos(popup.x+list.x, popup.y+y+list.y-1)
+                term.write((' '):rep(list.size.x+1))
+            end
             for i,item in pairs(list.content) do
-                term.setCursorPos(popup.x+list.x+nPosX, popup.y+list.y+nPosY)
-                draw.switchFGBG(
-                    (i==list.selected) and colorMatch.special   or colorMatch.text,
-                    (i==list.selected) and colorMatch.popupFont or colorMatch.popupFrame
-                )
-                term.write(item)
-                nPosX = nPosX+#item
-                if nPosX>list.size.x then
-                    nPosY = nPosY+1
-                    nPosX = 0
+                if i>=list.scrolled then
+                    if list.type == "sidebyside" then
+                        term.setCursorPos(popup.x+list.x+nPosX, popup.y+list.y+nPosY)
+                        draw.switchFGBG(
+                            (i==list.selected) and colorMatch.special   or colorMatch.text,
+                            (i==list.selected) and colorMatch.popupFont or colorMatch.popupFrame
+                        )
+                        term.write(item)
+                        nPosX = nPosX+#item
+                        if nPosX>list.size.x then
+                            nPosY = nPosY+1
+                            nPosX = 0
+                        end
+                    elseif list.type == "listed" then
+                        term.setCursorPos(popup.x+list.x, popup.y+list.y+nPosY)
+                        draw.switchFGBG(
+                            (i==list.selected) and colorMatch.special   or colorMatch.text,
+                            (i==list.selected) and colorMatch.popupFont or colorMatch.popupFrame
+                        )
+                        term.write(item..(' '):rep((list.size.x+1)-#item))
+                        nPosY = nPosY+1
+                        if nPosY>=list.size.y then
+                            break
+                        end
+                    end
                 end
             end
+        end
+    end
+    --[[ Label ]]
+    if type(popup.label)=="table" then
+        for _,label in pairs(popup.label) do
+            term.setCursorPos(popup.x+label.x, popup.y+label.y)
+            if type(label.bg)=="number" then
+                term.setBackgroundColor(label.bg)
+            else term.setBackgroundColor(colorMatch.popupBG) end
+            local str = label.content
+            if type(str) == "function" then
+                str = str()
+            end
+            str = tostring(str)
+            if type(label.fg)=="number" then
+                str = "{&"..blits[label.fg or colorMatch.popupFont]..str
+            end
+            draw.fText(str)
         end
     end
 end
@@ -1590,9 +1653,9 @@ function input.insert.cursorBackspace()
     if not (tCursor.y == 1 and tCursor.x == 1) then
         local lastY = tCursor.y
         local sLine = tContent[tCursor.y]
-        if sLine:sub(tCursor.x-#cosuConf.sTabSpace, tCursor.x-1) == cosuConf.sTabSpace then
-            tContent[tCursor.y] = string.sub(sLine, 1, tCursor.x-#cosuConf.sTabSpace-1) .. string.sub(sLine, tCursor.x)
-            for i=1,#cosuConf.sTabSpace-1 do
+        if sLine:sub(tCursor.x-cosuConf.nTabSpace, tCursor.x-1) == (' '):rep(cosuConf.nTabSpace) then
+            tContent[tCursor.y] = string.sub(sLine, 1, tCursor.x-cosuConf.nTabSpace-1) .. string.sub(sLine, tCursor.x)
+            for i=1,cosuConf.nTabSpace-1 do
                 input.insert.cursorHorizontal("left")
             end
         elseif tCursor.x > 1 then
@@ -1619,7 +1682,7 @@ function input.insert.cursorEnter()
         end
         nCounter=nCounter+1
     end
-    sSpaces = (cosuConf.sTabSpace):rep(math.floor(nCounter/4))
+    sSpaces = ((' '):rep(cosuConf.nTabSpace)):rep(math.floor(nCounter/4))
     tContent[tCursor.y] = sLine:sub(1, tCursor.x-1)
     table.insert(tContent, tCursor.y+1, sSpaces..sLine:sub(tCursor.x))
     input.insert.cursorVertical("down")
@@ -1649,12 +1712,14 @@ function input.menu.cursorEnter()
         if type(tPopup[1].textBox) == "table" then
             nItems = #tPopup[1].textBox
         end
-        for nIndex,tB in pairs(tPopup[1].button) do
-            if tCursor.selectedItem == nItems+nIndex then
-                if type(tB.func) == "function" then
-                    tB.func(tPopup[1])
+        if type(tPopup[1].button) == "table" then
+            for nIndex,tB in pairs(tPopup[1].button) do
+                if tCursor.selectedItem == nItems+nIndex then
+                    if type(tB.func) == "function" then
+                        tB.func(tPopup[1], tB)
+                    end
+                    break
                 end
-                break
             end
         end
         return
@@ -1694,14 +1759,15 @@ function input.menu.cursorHorizontal(sWay)
     if type(tPopup[1].textBox) == "table" then
         nItems = #tPopup[1].textBox
     end
+    local nLen = #(tPopup[1].button or "")
     if sWay == "left" then
         if tCursor.selectedItem > 1 then
             tCursor.selectedItem = tCursor.selectedItem-1
         elseif cosuConf.bJumpAtEndToBegin then
-            tCursor.selectedItem = #tPopup[1].button+nItems
+            tCursor.selectedItem = nLen+nItems
         end
     elseif sWay == "right" then
-        if tCursor.selectedItem < #tPopup[1].button+nItems then
+        if tCursor.selectedItem < nLen+nItems then
             tCursor.selectedItem = tCursor.selectedItem+1
         elseif cosuConf.bJumpAtEndToBegin then
             tCursor.selectedItem = 1
@@ -1711,9 +1777,9 @@ end
 
 function input.menu.cursorVertical(sWay)
     if sWay == "up" then
-        input.menu.cursorHorizontal("right")
-    elseif sWay == "down" then
         input.menu.cursorHorizontal("left")
+    elseif sWay == "down" then
+        input.menu.cursorHorizontal("right")
     end
 end
 
@@ -1738,13 +1804,15 @@ function input.menu.mouseClick(nButton, nX, nY)
         if type(tPopup[1].textBox) == "table" then
             nItems = #tPopup[1].textBox
         end
-        for nIndex,tB in pairs(tPopup[1].button) do
-            if nX >= tPopup[1].x+tB.x and nX < tPopup[1].x+tB.x+#tB.label and nY == tPopup[1].y+tB.y then
-                if (cosuConf.bDoubleClickButton and tCursor.selectedItem==nIndex+nItems) or not cosuConf.bDoubleClickButton then
-                    tB.func()
+        if type(tPopup[1].button) == "table" then
+            for nIndex,tB in pairs(tPopup[1].button) do
+                if nX >= tPopup[1].x+tB.x and nX < tPopup[1].x+tB.x+#tB.label and nY == tPopup[1].y+tB.y then
+                    if (cosuConf.bDoubleClickButton and tCursor.selectedItem==nIndex+nItems) or not cosuConf.bDoubleClickButton then
+                        tB.func(tPopup[1], tB)
+                    end
+                    tCursor.selectedItem = nIndex+nItems
+                    return
                 end
-                tCursor.selectedItem = nIndex+nItems
-                return
             end
         end
         --[[ TextBox ]]
@@ -1758,12 +1826,15 @@ function input.menu.mouseClick(nButton, nX, nY)
         --[[ List ]]
         if type(tPopup[1].list)=="table" then
             for _,list in pairs(tPopup[1].list) do
-                if nX >= tPopup[1].x+list.x and nX < tPopup[1].x+list.x+tPopup[1].size.x then
-                    if nY >= tPopup[1].y+list.y and nY < tPopup[1].y+list.y+tPopup[1].size.y then
+                if nX >= tPopup[1].x+list.x and nX <= tPopup[1].x+list.x+list.size.x then
+                    if nY >= tPopup[1].y+list.y and nY < tPopup[1].y+list.y+list.size.y then
+                        local nSubX,nSubY = nX-(tPopup[1].x-1+list.x), nY-(tPopup[1].y-1+list.y)
                         if list.type == "sidebyside" then
-                            local nSubX,nSubY = nX-tPopup[1].x, nY-tPopup[1].y
                             list.selected = nSubX + (nSubY-1)*(list.size.x+1)
+                        elseif list.type == "listed" and nSubY>=1 and nSubY<=#list.content then
+                            list.selected = nSubY
                         end
+                        list.changed(tPopup[1], list)
                     end
                 end
             end
@@ -1989,7 +2060,7 @@ function input.handle.insert(event)
             input.menu.key(event[2],event[3])
         end
         -- For CraftOS-PC
-        if tActiveKeys[keys.leftAlt] then
+        if tActiveKeys[keys.leftAlt] and mode ~= "menu" then
             local sKey = keys.getName(event[2])
             if #sKey == 1 then
                 category.openByChar(sKey)
@@ -2009,7 +2080,7 @@ function input.handle.insert(event)
             if type(input[mode].tab) == "function" then
                 input[mode].tab()
             elseif mode == "insert" then
-                input[mode].char(cosuConf.sTabSpace)
+                input[mode].char((' '):rep(cosuConf.nTabSpace))
             elseif mode == "insertAuto" and tAutoCompleteList[tCursor.autoListY+1] then
                 input.insert.char(tAutoCompleteList[tCursor.autoListY+1],true)
                 tCursor.autoListY = 0
@@ -2048,6 +2119,7 @@ function input.handle.insert(event)
                 elseif sExecute == "SaveAs" then    file("create", "save as")
                 elseif sExecute == "Save" then      file("create", "save")
                 end
+                tActiveKeys["CTRL"] = false
             end
             -- Widgets
             for _,widget in pairs(tWidgets) do
@@ -2121,7 +2193,7 @@ local function main()
 
     if event[1] == "char" then
         -- For CCEmuX
-        if tActiveKeys[keys.leftAlt] then
+        if tActiveKeys[keys.leftAlt] and mode ~= "menu" then
             category.openByChar(event[2])
         else
             if mode == "toolbar" then
