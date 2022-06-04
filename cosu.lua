@@ -200,7 +200,7 @@ function update(event, ...)
     elseif event == "check" then
         --[[ Check updates ]]
         if http then
-            local gitAPI=http.get(sGithub.api)
+            local gitAPI=http.get(sGithub.api,_G._GIT_API_KEY and {Authorization="token ".._G._GIT_API_KEY})
             if gitAPI.getResponseCode()==200 then
                 local tGitContent = textutils.unserialiseJSON(gitAPI.readAll())
                 if tGitContent.tag_name ~= sVersion then
