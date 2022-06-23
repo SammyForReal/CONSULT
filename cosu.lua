@@ -26,6 +26,25 @@ cosuConf.bDoubleClickButton = false
 cosuConf.nTabSpace = 4 --[[ Normaly 4 spaces. ]]
 cosuConf.bJumpAtEndToBegin = true
 cosuConf.bShadows = true
+cosuConf.tPalette = {
+    true,
+    ["black"]     = 0x171421,
+    ["blue"]      = 0x2A7BDE,
+    ["brown"]     = 0xA2734C,
+    ["cyan"]      = 0x2AA1B3,
+    ["gray"]      = 0x5E5C64,
+    ["green"]     = 0x26A269,
+    ["lightBlue"] = 0x33C7DE,
+    ["lightGray"] = 0xD0CFCC,
+    ["lime"]      = 0x33D17A,
+    ["magenta"]   = 0xC061CB,
+    ["orange"]    = 0xE9AD0C,
+    ["pink"]      = 0xF66151,
+    ["purple"]    = 0xA347BA,
+    ["red"]       = 0xC01C28,
+    ["white"]     = 0xFFFFFF,
+    ["yellow"]    = 0xF3F03E
+}
 --[[ Color palette for .lua files ]]
 local colorMatch = { }
 colorMatch["popupBG"]=colors.lightGray
@@ -119,7 +138,7 @@ local sGithub = {
     ["api"]="https://api.github.com/repos/1turtle/consult/releases/latest",
     ["latest"]="https://github.com/1Turtle/consult/releases/latest/download/cosu.lua"
 }
-local sVersion = "1.3.0"
+local sVersion = "1.4.0"
 local tArgs = { ... }
 local init = function() return end
 local sPath = ""
@@ -191,6 +210,33 @@ local function formatText(sText,nLength,nColumns)
     end
     sText[#sText] = sText[#sText]:sub(1,nLength-3).."..."
     return table.unpack(sText)
+end
+
+local function cToStr(cFG, cBG)
+    return "{&"..(blits[cFG] or ' ')..(blits[cBG] or ' ')
+end
+
+local function fLen(text)
+    local len = 0
+    if text:find('{&') then
+        for word in string.gmatch(text, '([^{&]+)') do
+            len = len+#word:sub(3)
+        end
+    else
+        return #text
+    end
+    return len
+end
+
+local function swapColors()
+    if not cosuConf.tPalette[1] then return end
+    for color, code in pairs(cosuConf.tPalette) do
+        if type(color) == "string" then
+            local tmp = colors.packRGB(term.getPaletteColor(colors[color]))
+            term.setPaletteColor(colors[color], code)
+            cosuConf.tPalette[color] = tmp
+        end
+    end
 end
 
 --[[ +++ Popup handler +++ ]]
@@ -279,6 +325,62 @@ function update(event, ...)
             })
             tCursor.selectedItem = 1
         end
+    end
+end
+
+function openLink(event, ...)
+    if event == "close" then
+        for index,pop in pairs(tPopup) do
+            if pop.name == "Link" then
+                table.remove(tPopup, index)
+            end
+        end
+    elseif event == "create" then
+        local link = tostring(({...})[1])
+        link = link:sub(2,#link-1)
+        if fs.isDir(link)
+        or link == "" or link == "..." or link == "." or not fs.exists(link) or link:find('ö') or link:find('ä') or link:find('ü') then return end
+        local line = "Open the following "..(fs.isDir(link) and "directory" or "file").."?"
+        local slink = link
+        if #slink >= #line then
+            slink = ".."..slink:sub(-(#line-3))
+        end
+        table.insert(tPopup, 1, {
+            ["status"] = true,
+            ["name"] = "Link",
+            ["link"] = link,
+            ["size"] = {
+                ['x'] = nil,['y'] = nil
+            },
+            ["text"] = {
+                {
+                    line,
+                    cToStr(' ', colorMatch.bg)..(' '):rep(#line)
+                }
+            },
+            ["label"] = {
+                {
+                    content = cToStr(colorMatch.special,colorMatch.bg)..slink,
+                    x=math.floor((#line-#slink)/2+0.5),y=2,
+                }
+            },
+            ["button"] = {
+                { ['x']=#line-3, ['y']=4, ["label"]="Open", ["status"]=false, ["func"]=function(pop)
+                    local link = pop.link
+                    openLink("close")
+                    if multishell then
+                        if fs.isDir(link) then
+                            multishell.launch(_ENV, shell.resolveProgram("shell"))
+                        else
+                            multishell.launch(_ENV, shell.getRunningProgram(), link)
+                        end
+                        tActiveKeys["CTRL"] = false
+                    end
+                end},
+                { ['x']=#line-6, ['y']=4, ["label"]="No", ["status"]=false, ["func"]=function() openLink("close") end }
+            }
+        })
+        tCursor.selectedItem = 1
     end
 end
 
@@ -1013,7 +1115,7 @@ function loadAPIVirtual(sLine)
     elseif typeOfLoad=="peripheral.wrap" then
         ok,out = pcall(peripheral.wrap, sAPI)
     end
-    if ok and type(out)~="nil" then
+    if ok and type(out)=="table" then
         for var,value in pairs(out) do
             if type(sSubVar)=="string" and #sSubVar>1 then
                 if var==sSubVar then
@@ -1234,13 +1336,16 @@ function draw.dropdownBG(nW,nH, nX, nY, tLineBreaks)
 end
 
 function draw.fText(text)
+    local tx,bg = term.getTextColor(),term.getBackgroundColor()
     if text:find('{&') then
         for word in string.gmatch(text, '([^{&]+)') do
-            term.setTextColor(blitInvert[word:sub(1,1):lower()] or colorMatch.popupFont)
-            term.write(word:sub(2))
+            term.setTextColor(blitInvert[word:sub(1,1):lower()] or tx)
+            term.setBackgroundColor(blitInvert[word:sub(2,2):lower()] or bg)
+            term.write(word:sub(3))
         end
     else
-        term.setTextColor(colorMatch.popupFont)
+        draw.switchFGBG(tx,bg)
+        term.setTextColor(tx)
         term.write(text)
     end
 end
@@ -1254,8 +1359,9 @@ function draw.popup(popup,index)
             for _,tBlock in pairs(popup.text) do
                 for _,sLine in pairs(tBlock) do
                     size.h = size.h + 1
-                    if #sLine > size.w then
-                        size.w = #sLine
+                    local len = fLen(sLine)
+                    if len > size.w then
+                        size.w = len
                     end
                 end
                 size.h = size.h + 1
@@ -1275,8 +1381,8 @@ function draw.popup(popup,index)
     --[[ Border/BG ]]
     draw.switchFGBG(colorMatch["popupFrame"], colorMatch["popupBG"])
     draw.dropdownBG(size.w,size.h+2, popup.x,popup.y-1,{})
-    --[[ Text (& Line breaks) ]]
     draw.switchFGBG(colorMatch["popupFont"], colorMatch["popupBG"])
+    --[[ Text (& Line breaks) ]]
     local sBuffer = ("\140"):rep(size.w)
     local lCount = 0
     if type(popup.text)=="table" then
@@ -1285,6 +1391,7 @@ function draw.popup(popup,index)
                 lCount = lCount + 1
                 term.setCursorPos(popup.x+1, popup.y+lCount)
                 draw.fText(sLine)
+                draw.switchFGBG(colorMatch["popupFont"], colorMatch["popupBG"])
             end
             lCount = lCount + 1
             term.setCursorPos(popup.x+1, popup.y+lCount)
@@ -1362,16 +1469,11 @@ function draw.popup(popup,index)
     if type(popup.label)=="table" then
         for _,label in pairs(popup.label) do
             term.setCursorPos(popup.x+label.x, popup.y+label.y)
-            if type(label.bg)=="number" then
-                term.setBackgroundColor(label.bg)
-            else term.setBackgroundColor(colorMatch.popupBG) end
             local str = label.content
-            if type(str) == "function" then
-                str = str()
-            end
+            if type(str) == "function" then str = str() end
             str = tostring(str)
             if type(label.fg)=="number" then
-                str = "{&"..blits[label.fg or colorMatch.popupFont]..str
+                str = "{&"..blits[label.fg or colorMatch.popupFont]..blits[label.bg or colorMatch.popupBG]..str
             end
             draw.fText(str)
         end
@@ -1455,59 +1557,63 @@ function draw.toolbar()
     term.write('\133')
 end
 
+local tInfobar = {
+    { --[[ Left side ]]
+        function()
+            local sShowPath=sPath
+            if sPath == "" then
+                sShowPath="/*.lua"
+            end
+            if #sShowPath > w then
+                sShowPath = sShowPath:sub(-w+1)
+            elseif #sShowPath > w/2 then
+                sShowPath = sShowPath:sub(-math.floor(w/2))
+            end
+            return cToStr(colorMatch.special,colorMatch.bg).." "..sShowPath..cToStr(colorMatch.bg,cosuConf.cAccentColor)..'\151'
+        end
+    },{ --[[ Right side ]]
+    function() return cToStr(colorMatch.cAccentText).."Col "..cToStr(colorMatch.text)..tCursor.x.." "end,
+    function() return cToStr(colorMatch.cAccentText).."Ln "..cToStr(colorMatch.text)..tCursor.y..cToStr(colorMatch.cAccentText).."," end,
+    function()
+            --[[ Calculate size ]]
+            local size,sizeType = 0,""
+            for _,v in pairs(tContent) do
+                size = size+#v+1
+            end
+            --[[ Size in kB/Byte as string ]]
+            if math.floor(size/1000) == 0 then
+                size = tostring(size-1)
+                sizeType = "Byte"
+            else
+                local sNumber = tostring((size-1)/1000)
+                local nX = sNumber:find("%.")
+                if nX then sNumber = sNumber:sub(1,nX+2) end
+                size = sNumber
+                sizeType = "kB"
+            end
+            return cToStr(colorMatch.special).."["..cToStr(colorMatch.text)..size..cToStr(colorMatch.cAccentText)..sizeType..cToStr(colorMatch.special).."]"
+        end,
+    }
+}
 function draw.infobar()
-    --[[ Calculate size ]]
-    local size,sizeType = 0,""
-    for _,v in pairs(tContent) do
-        size = size+#v+1
-    end
-    --[[ Size in kB/Byte as string ]]
-    if math.floor(size/1000) == 0 then
-        size = tostring(size-1)
-        sizeType = "Byte"
-    else
-        local sNumber = tostring((size-1)/1000)
-        local nX = sNumber:find("%.")
-        if nX then sNumber = sNumber:sub(1,nX+2) end
-        size = sNumber
-        sizeType = "kB"
-    end
-    --[[ Draw size and cursor pos ]]
-    term.setCursorPos(1,h)
+    local nX = 1
+    term.setCursorPos(nX,h)
     term.setBackgroundColor(cosuConf.cAccentColor)
     term.clearLine()
-    local nRightBegin = w-(#tostring(tCursor.x)+#tostring(tCursor.y)+#size+#sizeType+12)
-    term.setCursorPos(nRightBegin,h)
-    draw.switchFGBG(colorMatch["special"], cosuConf.cAccentColor)
-    term.write("[")
-    term.setTextColor(colors.white)
-    term.write(size)
-    term.setTextColor(colorMatch.cAccentText)
-    term.write(sizeType)
-    term.setTextColor(colorMatch["special"])
-    term.write("]  ")
-    term.setTextColor(colorMatch.cAccentText)
-    term.write("Ln ")
-    term.setTextColor(colors.white)
-    term.write(tCursor.y)
-    term.setTextColor(colorMatch.cAccentText)
-    term.write(",Col ")
-    term.setTextColor(colors.white)
-    term.write(tCursor.x)
-    term.setCursorPos(1,h)
-    term.setBackgroundColor(colorMatch["bg"])
-    term.setTextColor(colorMatch["special"])
-    local sShowPath=sPath
-    if sPath == "" then
-        sShowPath="/*.lua"
+    for _,info in pairs(tInfobar[1]) do
+        term.setCursorPos(nX,h)
+        draw.fText(info())
+        nX = term.getCursorPos()+1
     end
-    if #sShowPath>=nRightBegin then
-        sShowPath="..."..sShowPath:sub(-nRightBegin+3)
+        
+    local nSubX = w+2
+    for _,content in pairs(tInfobar[2]) do
+        local line = content()
+        nSubX = nSubX-fLen(line)-1
+        if nSubX < nX then break end
+        term.setCursorPos(nSubX,h)
+        draw.fText(line)
     end
-    term.write(' '..sShowPath)
-    term.setTextColor(cosuConf.cAccentColor)
-    draw.switchFGBG()
-    term.write('\151')
 end
 
 function draw.handler()
@@ -1702,6 +1808,28 @@ function input.insert.mouseClick(nButton, nX, nY)
             tCursor.x = nX + tScroll.x
             if tCursor.x > #tContent[tCursor.y] then tCursor.x = #tContent[tCursor.y]+1 end
             tCursor.lastX = tCursor.x
+
+            if tActiveKeys["CTRL"] then
+                local line = tContent[tCursor.y+tScroll.y]
+                if line:find('\"') or line:find('\'') then
+                    local nXStart,nXEnd
+                    for i=tCursor.x+tScroll.x,1,-1 do
+                        if line:sub(i,i) == '\"' or line:sub(i,i) == '\'' then
+                            nXStart = i
+                            break
+                        end
+                    end
+                    for i=tCursor.x+tScroll.x,#line,1 do
+                        if line:sub(i,i) == '\"' or line:sub(i,i) == '\'' then
+                            nXEnd = i
+                            break
+                        end
+                    end
+                    if nXStart and nXEnd then
+                        openLink("create", line:sub(nXStart,nXEnd))
+                    end
+                end
+            end
         end
     end
 end
@@ -2147,6 +2275,7 @@ function input.handle.mouse(event)
 end
 
 function init()
+    swapColors()
     --[[ Check args ]]
     if #tArgs > 0 then
         --[[ Collect file informations ]]
@@ -2166,6 +2295,9 @@ function init()
             file.close()
         else
             table.insert(tContent, "")
+            if sPath:sub(#sPath-3) ~= ".lua" then
+                sPath = sPath..".lua"
+            end
         end
     else
         table.insert(tContent, "")
@@ -2233,6 +2365,11 @@ end
 
 
 --[[ +++ Actual start of the program LOL +++ ]]
+for i,name in pairs(tArgs) do
+    if name == "return" then
+        return 0
+    end
+end
 if not init() then
     return false
 end
@@ -2279,7 +2416,7 @@ local sDir = '/'..fs.getDir(shell.getRunningProgram())..'/'
 local sCurID = tostring( (type(multishell)~="nil") and multishell.getCurrent() or "" )
 fs.delete(sDir..".tmp"..sCurID)
 
-
+swapColors()
 term.setBackgroundColor(colors.black)
 term.setTextColor(colors.white)
 shell.run("clear")
