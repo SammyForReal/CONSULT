@@ -259,8 +259,8 @@ function update(event, ...)
                     gitAPI.close()
                     return true,tGitContent.tag_name,tGitContent.body
                 end
+                gitAPI.close()
             end
-            gitAPI.close()
         end
         return false
     elseif event == "now" then
