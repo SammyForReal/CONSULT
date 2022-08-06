@@ -138,7 +138,7 @@ local sGithub = {
     ["api"]="https://api.github.com/repos/1turtle/consult/releases/latest",
     ["latest"]="https://github.com/1Turtle/consult/releases/latest/download/cosu.lua"
 }
-local sVersion = "1.4.0"
+local sVersion = "1.4.1"
 local tArgs = { ... }
 local init = function() return end
 local sPath = ""
