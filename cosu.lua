@@ -139,6 +139,7 @@ local sGithub = {
     ["latest"]="https://github.com/1Turtle/consult/releases/latest/download/cosu.lua"
 }
 local sVersion = "1.4.1"
+local bPreview = false
 local tArgs = { ... }
 local init = function() return end
 local sPath = ""
@@ -156,7 +157,7 @@ local running = true
 local bSaved = true
 local category = { }
 local tWidgets = { }
-local input = {}
+local input = { handle = {}, insertAuto = {}, insert = {}, toolbar = {}, menu = {} }
 local blits = {[1]='0',[2]='1',[4]='2',[8]='3',[16]='4',[32]='5',[64]='6',[128]='7',[256]='8',[512]='9',[1024]='a',[2048]='b',[4096]='c',[8192]='d',[16384]='e',[32768]='f' }
 local blitInvert = {['0']=1,['1']=2,['2']=4,['3']=8,['4']=16,['5']=32,['7']=128,['8']=256,['9']=512,['a']=1024,['b']=2048,['c']=4096,['d']=8192,['e']=16384,['f']=32768 }
 
@@ -240,7 +241,7 @@ local function swapColors()
 end
 
 --[[ +++ Popup handler +++ ]]
-local update,info,help,file,error,options,exit,specialChar
+local update,info,help,file,error,options,exit,specialChar,openLink,openShell
 
 function update(event, ...)
     if event == "close" then
@@ -645,7 +646,7 @@ function file(event, ...)
             term.setTextColor(colors.red)
             print(e)
             term.setTextColor(colors.white)
-        end print("Press any key to exit") os.pullEvent("key") ]])
+        end print("Press any key to exit") sleep(0.05) os.pullEvent("key") ]])
         f.close()
         if multishell then
             local nID = multishell.launch(_ENV, sDir..".tmp"..sCurID, ...)
@@ -870,17 +871,27 @@ function specialChar(event, ...)
                 input.insert.char(icon)
             end,
             ["key"]=function(self, id,_)
+                local worked = false
                 if self.list[1].type == "sidebyside" then
                     if id == cosuConf.tKeyboard.up and (self.list[1].selected-self.list[1].size.x-1) > 0 then
                         self.list[1].selected = self.list[1].selected-self.list[1].size.x-1
+                        worked = true
                     elseif id == cosuConf.tKeyboard.down and (self.list[1].selected+(self.list[1].size.x+1)) < self.list[1].size.max then
                         self.list[1].selected = self.list[1].selected+(self.list[1].size.x+1)
+                        worked = true
                     end
                 end
                 if id == cosuConf.tKeyboard.left and self.list[1].selected>1 then
                     self.list[1].selected = self.list[1].selected-1
+                    worked = true
                 elseif id == cosuConf.tKeyboard.right and self.list[1].selected<self.list[1].size.max then
                     self.list[1].selected = self.list[1].selected+1
+                    worked = true
+                end
+                if not worked then
+                    if id ~= cosuConf.tKeyboard.enter then
+                        specialChar("close")
+                    end
                 end
             end,
             ["status"] = true,
@@ -971,13 +982,13 @@ local tToolbar = {
 tWidgets = {
     ["\002"] = {
         ["name"]="specialChar",
-        ['color']=term.isColor() and colors.lime or colors.white,
+        ["color"]=term.isColor() and colors.lime or colors.white,
         ["func"]=function() specialChar("create") end,
         ["shourtcut"]=cosuConf.tKeyboard.F_SpChar
     },
     [">_"] = {
         ["name"]="openShell",
-        ['color']=term.isColor() and colors.yellow or colors.white,
+        ["color"]=term.isColor() and colors.yellow or colors.white,
         ["func"]=openShell,
         ["shourtcut"]=cosuConf.tKeyboard.F_NewShell
     }
@@ -1512,6 +1523,36 @@ function draw.dropdown(tList, nX, nY)
     end
 end
 
+function draw.preview()
+    local len,begin = w-2,1
+    for _,tool in pairs(tToolbar) do
+        len = len-(#tool.name+2)
+        begin = begin+(#tool.name+2)
+    end
+    for name,_ in pairs(tWidgets) do
+        len = len-(#name+1)
+    end
+    local str = ("visit consult.madefor.cc"):upper()
+    if (#str+2) < len then
+        term.setCursorPos(begin-1+(len-(#str+2))/2,1)
+        draw.switchFGBG(cosuConf.cAccentColor, colorMatch.bg)
+        term.write('\133')
+        draw.switchFGBG(colorMatch.text, colorMatch.bg)
+        term.write(str)
+        draw.switchFGBG(cosuConf.cAccentColor, colorMatch.bg)
+        term.write('\138')
+    elseif (#str+2) < w then
+        term.setCursorPos(w+1-(#str+2),h-1)
+        term.setBackgroundColor(colorMatch.bg)
+        term.setTextColor(colorMatch.special)
+        term.write('[')
+        term.setTextColor(colorMatch.keyword)
+        term.write(str)
+        term.setTextColor(colorMatch.special)
+        term.write(']')
+    end
+end
+
 function draw.toolbar()
     term.setCursorPos(1,1)
     term.setBackgroundColor(cosuConf.cAccentColor)
@@ -1629,13 +1670,16 @@ function draw.handler()
         draw.popup(tPopup[i],i)
     end
 
+    if bPreview then
+        draw.preview()
+    end
+
     term=nTerm
     fTerm.render()
     term.setCursorBlink(true)
 end
 
 
-input = { handle = {}, insertAuto = {}, insert = {}, toolbar = {}, menu = {} }
 --[[ +++ Input functions +++ ]]
 function input.insert.cursorVertical(sWay, bJump)
     if sWay == "up" then
@@ -1962,7 +2006,9 @@ function input.menu.mouseClick(nButton, nX, nY)
                         elseif list.type == "listed" and nSubY>=1 and nSubY<=#list.content then
                             list.selected = nSubY
                         end
-                        list.changed(tPopup[1], list)
+                        if list.changed then
+                            list.changed(tPopup[1], list)
+                        end
                     end
                 end
             end
@@ -2278,26 +2324,37 @@ function init()
     swapColors()
     --[[ Check args ]]
     if #tArgs > 0 then
+        local arg = tArgs[1]
+        if tArgs[1] == "--preview" or tArgs[1] == "-p" then
+            bPreview = true
+            arg = tArgs[2]
+        elseif tArgs[2] == "--preview" or tArgs[2] == "-p" then
+            bPreview = true
+        end
         --[[ Collect file informations ]]
-        sPath = shell.resolve(tArgs[1])
-        bReadOnly = fs.isReadOnly(sPath)
-        if fs.exists(sPath) then
-            if fs.isDir(sPath) then
-                printError("Cannot consult a directory.")
-                return false
+        if arg then
+            sPath = shell.resolve(arg)
+            bReadOnly = fs.isReadOnly(sPath)
+            if fs.exists(sPath) then
+                if fs.isDir(sPath) then
+                    printError("Cannot consult a directory.")
+                    return false
+                end
+                local file = fs.open(sPath, 'r')
+                local sLine = file.readLine()
+                while sLine do
+                    tContent[#tContent+1] = sLine
+                    sLine = file.readLine()
+                end
+                file.close()
+            else
+                table.insert(tContent, "")
+                if sPath:sub(#sPath-3) ~= ".lua" then
+                    sPath = sPath..".lua"
+                end
             end
-            local file = fs.open(sPath, 'r')
-            local sLine = file.readLine()
-            while sLine do
-                tContent[#tContent+1] = sLine
-                sLine = file.readLine()
-            end
-            file.close()
         else
             table.insert(tContent, "")
-            if sPath:sub(#sPath-3) ~= ".lua" then
-                sPath = sPath..".lua"
-            end
         end
     else
         table.insert(tContent, "")
@@ -2343,6 +2400,7 @@ local function main()
         input.handle.mouse(event)
     elseif event[1] == "term_resize" then
         w,h = term.getSize()
+        fTerm.clear()
     elseif event[1] == "terminate" then
         running = 0
     end
@@ -2365,11 +2423,6 @@ end
 
 
 --[[ +++ Actual start of the program LOL +++ ]]
-for i,name in pairs(tArgs) do
-    if name == "return" then
-        return 0
-    end
-end
 if not init() then
     return false
 end
