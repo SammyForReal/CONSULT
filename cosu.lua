@@ -138,7 +138,7 @@ local sGithub = {
     ["api"]="https://api.github.com/repos/1turtle/consult/releases/latest",
     ["latest"]="https://github.com/1Turtle/consult/releases/latest/download/cosu.lua"
 }
-local sVersion = "1.4.2"
+local sVersion = "1.4.3"
 local bPreview = false
 local tArgs = { ... }
 local init = function() return end
@@ -157,6 +157,8 @@ local running = true
 local bSaved = true
 local category = { }
 local tWidgets = { }
+local draw = { }
+local bLvlOS = (lOS and LevelOS and lUtils)
 local input = { handle = {}, insertAuto = {}, insert = {}, toolbar = {}, menu = {} }
 local blits = {[1]='0',[2]='1',[4]='2',[8]='3',[16]='4',[32]='5',[64]='6',[128]='7',[256]='8',[512]='9',[1024]='a',[2048]='b',[4096]='c',[8192]='d',[16384]='e',[32768]='f' }
 local blitInvert = {['0']=1,['1']=2,['2']=4,['3']=8,['4']=16,['5']=32,['7']=128,['8']=256,['9']=512,['a']=1024,['b']=2048,['c']=4096,['d']=8192,['e']=16384,['f']=32768 }
@@ -173,6 +175,15 @@ local function autocomplete()
         tAutoCompleteList = textutils.complete(tContent[tCursor.y]:sub(nStartPos, tCursor.x-1), virtualEnviroment)
     end
     return (#tAutoCompleteList > 0)
+end
+
+local string = string
+function string.rep(str, num)
+    local tmp = ""
+    for i = 1, num do
+        tmp = tmp .. str
+    end
+    return tmp
 end
 
 local function checkAutoComplete()
@@ -240,8 +251,78 @@ local function swapColors()
     end
 end
 
+local function levelLaunch(path,title)
+    local gW,gH = lOS.wAll.getSize()
+    local x,y = LevelOS.self.window.win.getPosition()
+    local win = lOS.execute(
+        path,
+        "windowed",
+        x+(x+w+1<gW and 2 or 0),
+        y+(y+h+1<gH and 2 or 0),
+        51,
+        19,
+        true
+    )
+    win.icon = {'\138', "9"}
+    if title then
+        win.title = title
+    end
+end
+
 --[[ +++ Popup handler +++ ]]
-local update,info,help,file,error,options,exit,specialChar,openLink,openShell
+local update,info,help,file,error,options,exit,specialChar,openLink,openShell,openPopup
+
+function openPopup(pop)
+    if bLvlOS then
+        -- Get length of longest text line
+        local nLongestMsg = 7
+        if pop.text then
+            for _,tMsgs in pairs(pop.text) do
+                for _,sMsg in pairs(tMsgs) do
+                    if #sMsg > nLongestMsg then
+                        nLongestMsg = #sMsg
+                    end
+                end
+            end
+        end
+        -- Convert content
+        local str = ""
+        local height = 1
+        if pop.text then
+            for _,line in pairs(pop.text) do
+                for _,msg in pairs(line) do
+                    str = str..msg.."\n"
+                    height=height+1
+                end
+                str = str..("-"):rep(nLongestMsg).."\n"
+                height=height+3
+            end
+        end
+        -- Convert buttons
+        local buttons = {}
+        for _,tBtn in pairs(pop.button) do
+            table.insert(buttons, tBtn.label)
+        end
+        if #buttons == 0 then
+            buttons = {"Ok"}
+        end
+        local result = {false}
+        while not result[1] do
+            draw.handler()
+            result = {lUtils.popup(pop.name, str, nLongestMsg+2, height, buttons, pop.label, pop.link)}
+            if result[1] then
+                if result[2] then
+                    if pop.button[result[2]].func then
+                        pop.button[result[2]].func(pop)
+                    end
+                end
+            end
+        end
+    else
+        table.insert(tPopup, 1, pop)
+        tCursor.selectedItem = 1
+    end
+end
 
 function update(event, ...)
     if event == "close" then
@@ -269,33 +350,42 @@ function update(event, ...)
         local gitAPI=http.get(sGithub.latest)
         if gitAPI.getResponseCode()==200 then
             local tGitContent = gitAPI.readAll()
-            local file = fs.open(shell.getRunningProgram(),'w')
+            local file
+            if bLvlOS then
+                file = fs.open( fs.combine(fs.getDir(shell.getRunningProgram()),"cosu.lua"),'w')
+            else
+                file = fs.open(shell.getRunningProgram(),'w')
+            end 
             file.flush()
             file.write(tGitContent)
             file.close()
         end
         gitAPI.close()
         --[[ Update popup ]]
-        for index,pop in pairs(tPopup) do
-            if pop.name == "Update CONSULT" then
-                tPopup[index].size = {
-                    ['x'] = nil,
-                    ['y'] = nil
-                }
-                tPopup[index].button = {
-                    { ['x']=42, ['y']=9, ["label"]="Thanks", ["status"]=false, ["func"]=function() update("close") end }
-                }
-                tPopup[index].text={
-                    {
-                        "UPDATE COMPLETE",
-                    },{
-                        "Congratulations! The program just got updated!",
-                        "Restart Consult to make changes take effect.",
-                        "Check out the changelog on Github.",
-                        "(see 'About' page under the 'Info' category for",
-                        " the link to the developers Github.)"
+        if bLvlOS then
+            lOS.notification("CONSULT", "Updated sucessfully! Restart cosu.", shell.getRunningProgram(), 3)
+        else
+            for index,pop in pairs(tPopup) do
+                if pop.name == "Update CONSULT" then
+                    tPopup[index].size = {
+                        ['x'] = nil,
+                        ['y'] = nil
                     }
-                }
+                    tPopup[index].button = {
+                        { ['x']=42, ['y']=9, ["label"]="Thanks", ["status"]=false, ["func"]=function() update("close") end }
+                    }
+                    tPopup[index].text={
+                        {
+                            "UPDATE COMPLETE",
+                        },{
+                            "Congratulations! The program just got updated!",
+                            "Restart Consult to make changes take effect.",
+                            "Check out the changelog on Github.",
+                            "(see 'About' page under the 'Info' category for",
+                            " the link to the developers Github.)"
+                        }
+                    }
+                end
             end
         end
     elseif event == "create" then
@@ -303,7 +393,7 @@ function update(event, ...)
         --[[ Update available ]]
         if bAvailable then
             local tChangelog = {formatText(sChangelog,47,3)}
-            table.insert(tPopup, 1, {
+            openPopup({
                 ["status"] = true,
                 ["name"] = "Update CONSULT",
                 ["size"] = {
@@ -324,7 +414,6 @@ function update(event, ...)
                     { ['x']=39, ['y']=6+#tChangelog, ["label"]="No", ["status"]=false, ["func"]=function() update("close") end }
                 }
             })
-            tCursor.selectedItem = 1
         end
     end
 end
@@ -339,14 +428,14 @@ function openLink(event, ...)
     elseif event == "create" then
         local link = tostring(({...})[1])
         link = link:sub(2,#link-1)
-        if fs.isDir(link)
-        or link == "" or link == "..." or link == "." or not fs.exists(link) or link:find('ö') or link:find('ä') or link:find('ü') then return end
+        if fs.isDir(link) and not bLvlOS then return end
+        if link == "" or link == "..." or link == "." or not fs.exists(link) or link:find('ö') or link:find('ä') or link:find('ü') then return end
         local line = "Open the following "..(fs.isDir(link) and "directory" or "file").."?"
         local slink = link
         if #slink >= #line then
             slink = ".."..slink:sub(-(#line-3))
         end
-        table.insert(tPopup, 1, {
+        openPopup({
             ["status"] = true,
             ["name"] = "Link",
             ["link"] = link,
@@ -369,7 +458,14 @@ function openLink(event, ...)
                 { ['x']=#line-3, ['y']=4, ["label"]="Open", ["status"]=false, ["func"]=function(pop)
                     local link = pop.link
                     openLink("close")
-                    if multishell then
+                    if bLvlOS then
+                        if fs.isDir(link) and fs.exists("Program_Files/LevelOS/Explorer/main.lua") then
+                            levelLaunch("Program_Files/LevelOS/Explorer/main.lua "..link)
+                        else
+                            levelLaunch(shell.getRunningProgram().." "..link)
+                        end
+                        tActiveKeys["CTRL"] = false
+                    elseif multishell then
                         if fs.isDir(link) then
                             multishell.launch(_ENV, shell.resolveProgram("shell"))
                         else
@@ -381,7 +477,6 @@ function openLink(event, ...)
                 { ['x']=#line-6, ['y']=4, ["label"]="No", ["status"]=false, ["func"]=function() openLink("close") end }
             }
         })
-        tCursor.selectedItem = 1
     end
 end
 
@@ -393,7 +488,7 @@ function info(event, ...)
             end
         end
     elseif event == "create" then
-        table.insert(tPopup, 1, {
+        openPopup({
             ["status"] = true,
             ["name"] = "About CONSULT",
             ["size"] = {
@@ -414,7 +509,6 @@ function info(event, ...)
                 { ['x']=31, ['y']=8, ["label"]="Thanks", ["status"]=false, ["func"]=function() info("close") end }
             }
         })
-        tCursor.selectedItem = 1
     end
 end
 
@@ -427,15 +521,28 @@ function help(event, ...)
         end
     elseif event == "change" then
         local nPage = ({...})[1]
-        if nPage > 0 and tPopup[1].page < #tPopup[1].data then
-            tPopup[1].page = tPopup[1].page+1
-            tPopup[1].text = tPopup[1].data[tPopup[1].page]
-        elseif nPage < 0 and tPopup[1].page > 1 then
-            tPopup[1].page = tPopup[1].page-1
-            tPopup[1].text = tPopup[1].data[tPopup[1].page]
+        local nCurP = ({...})[2]
+        local nMax = ({...})[3]
+        if bLvlOS then
+            if nPage > 0 and nCurP < nMax then
+                nCurP = nCurP+1
+            elseif nPage < 0 and nCurP > 1 then
+                nCurP = nCurP-1
+            end
+            help("create", nCurP)
+        else
+            if nPage > 0 and tPopup[1].page < #tPopup[1].data then
+                tPopup[1].page = tPopup[1].page+1
+                tPopup[1].text = tPopup[1].data[tPopup[1].page]
+            elseif nPage < 0 and tPopup[1].page > 1 then
+                tPopup[1].page = tPopup[1].page-1
+                tPopup[1].text = tPopup[1].data[tPopup[1].page]
+            end
         end
     elseif event == "create" then
-        table.insert(tPopup, 1, {
+        local nPage = ({...})[1]
+        if not nPage then nPage = 1 end
+        local popup = {
             ["status"] = true,
             ["name"] = "Help Page",
             ["size"] = {
@@ -485,16 +592,16 @@ function help(event, ...)
                     }
                 }      
             },
-            ["page"] = 1,
+            ["page"] = nPage,
             ["text"] = { },
             ["button"] = {
-                { ['x']=10, ['y']=10, ["label"]="Next", ["status"]=false, ["func"]=function() help("change",1) end },
+                { ['x']=10, ['y']=10, ["label"]="Next", ["status"]=false, ["func"]=function(self) help("change",1, self.page, #self.data) end },
                 { ['x']=39, ['y']=10, ["label"]="Done", ["status"]=false, ["func"]=function() help("close") end },
-                { ['x']=1, ['y']=10, ["label"]="Previous", ["status"]=false, ["func"]=function() help("change",-1) end }
+                { ['x']=1, ['y']=10, ["label"]="Previous", ["status"]=false, ["func"]=function(self) help("change",-1, self.page, #self.data) end }
             }
-        })
-        tPopup[1].text = tPopup[1].data[1]
-        tCursor.selectedItem = 1
+        }
+        popup.text = popup.data[nPage]
+        openPopup(popup)
     end
 end
 
@@ -507,7 +614,7 @@ function file(event, ...)
             end
         end
     elseif event == "replace" then
-        table.insert(tPopup, 1, {
+        openPopup({
             ["status"] = true,
             ["name"] = "File - Replace",
             ["size"] = {
@@ -520,14 +627,13 @@ function file(event, ...)
             ["tmp"]=tArgs[1],
             ["button"] = {
                 { ['x']=26, ['y']=3, ["label"]="No", ["status"]=false, ["func"]=function() file("close") file("create", "save as") end },
-                { ['x']=29, ['y']=3, ["label"]="Yes", ["status"]=false, ["func"]=function() local tmp=tPopup[1].tmp file("close") file("create", "save", tmp, "force") end }
+                { ['x']=29, ['y']=3, ["label"]="Yes", ["status"]=false, ["func"]=function(self) local tmp=self.tmp file("close") file("create", "save", tmp, "force") end }
             }
         })
-        tCursor.selectedItem = 1
     elseif event == "saved" then
         local nLength = 13
         if #sPath+3 > 13 then nLength = #sPath+3 end
-        table.insert(tPopup, 1, {
+        local pop = {
             ["status"] = true,
             ["name"] = "File - Saved",
             ["size"] = {
@@ -541,8 +647,13 @@ function file(event, ...)
                 { ['x']=nLength-1, ['y']=4, ["label"]="Ok", ["status"]=false, ["func"]=function() file("close") end },
                 { ['x']=nLength-6, ['y']=4, ["label"]="Exit", ["status"]=false, ["func"]=function() file("close") exit("create") end }
             }
-        })
-        tCursor.selectedItem = 1
+        }
+        if bLvlOS then
+            lOS.notification("CONSULT", "Saved file as \'"..sPath..'\'', shell.getRunningProgram(), 3)
+        else
+            table.insert(tPopup, 1, pop)
+        end
+
         local sPathName = sPath:reverse()
         local nLastSlashPos = sPathName:find('/')
         if nLastSlashPos then
@@ -550,8 +661,10 @@ function file(event, ...)
         else
             sPathName = sPathName:reverse()
         end
-        if multishell then
-            multishell.setTitle(multishell.getCurrent(), sPathName.."-cosu")
+        if bLvlOS then
+            LevelOS.setTitle("CONSULT - "..sPathName)
+        elseif multishell then
+            multishell.setTitle(multishell.getCurrent(), "cosu-["..sPathName.."]")
         end
     elseif event == "create" then
         if tArgs[1] == "save" then
@@ -598,9 +711,12 @@ function file(event, ...)
                     { ['x']=12, ['y']=4+#tMsg, ["label"]="Done", ["status"]=false, ["func"]=function() local tmp=tPopup[1].textBox[1].input file("close") file("create", "save", tmp) end }
                 }
             })
-            tCursor.selectedItem = 1
+
         elseif tArgs[1] == "new" then
-            if multishell then
+            if bLvlOS then
+                levelLaunch(shell.getRunningProgram(), "CONSULT")
+                category.reset()
+            elseif multishell then
                 local tabId = multishell.launch(_ENV, shell.getRunningProgram())
                 multishell.setTitle(tabId, "cosu")
                 multishell.setFocus(tabId)
@@ -612,7 +728,7 @@ function file(event, ...)
                     tScroll = { ['x']=0,['y']=0 }
                     return
                 end
-                table.insert(tPopup, 1, {
+                openPopup({
                     ["status"] = true,
                     ["name"] = "File - New",
                     ["size"] = {
@@ -627,12 +743,11 @@ function file(event, ...)
                         { ['x']=28, ['y']=4, ["label"]="Yes", ["status"]=false, ["func"]=function() file("close") file("create", "new", "force") end }
                     }
                 })
-                tCursor.selectedItem = 1
             end
         end
     elseif event == "execute" then
         local sDir = '/'..fs.getDir(shell.getRunningProgram())..'/'
-        local sCurID = tostring( type(multishell)~="nil" and tostring(multishell.getCurrent()) or "" )
+        local sCurID = tostring( (not bLvlOS and type(multishell)~="nil") and multishell.getCurrent() or "" )
         local f = fs.open(sDir..".tmp"..sCurID, 'w')
         f.flush()
         f.write("local function c() ")
@@ -648,9 +763,12 @@ function file(event, ...)
             term.setTextColor(colors.white)
         end print("Press any key to exit") sleep(0.05) os.pullEvent("key") ]])
         f.close()
-        if multishell then
+
+        if bLvlOS then
+            levelLaunch(sDir..".tmp"..sCurID, "CONSULT - [running]")
+        elseif multishell then
             local nID = multishell.launch(_ENV, sDir..".tmp"..sCurID, ...)
-            multishell.setTitle(nID, "[run]-cosu")
+            multishell.setTitle(nID, "cosu-[run"..nID.."]")
             multishell.setFocus(nID)
         else
             term.setBackgroundColor(colors.black)
@@ -686,7 +804,8 @@ function error(event, name, ...)
             end
             nXCounter = nXCounter+1
         end
-        table.insert(tPopup, 1, {
+
+        openPopup({
             ["status"] = true,
             ["name"] = "Error - "..name,
             ["size"] = {
@@ -698,7 +817,6 @@ function error(event, name, ...)
                 { ['x']=nLongestMsg-1, ['y']=nXCounter+1, ["label"]="Ok", ["status"]=false, ["func"]=function() error("close") end }
             }
         })
-        tCursor.selectedItem = 1
     end
 end
 
@@ -776,12 +894,15 @@ function options(event, ...)
             f.write( "return "..textutils.serialize(cosuConf) )
             f.close()
         end
-        if multishell then
+
+        if bLvlOS then
+            levelLaunch(shell.getRunningProgram().." "..sDir..".cosu.conf", "CONSULT - [options]")
+        elseif multishell then
             local tabId = multishell.launch(_ENV,
                 shell.getRunningProgram(),
                 sDir..".cosu.conf"
             )
-            multishell.setTitle(tabId, "[options]-cosu")
+            multishell.setTitle(tabId, "cosu-[options]")
         else
             if bSaved or tSubArgs[1] == "force" then
                 tContent = { }
@@ -791,7 +912,7 @@ function options(event, ...)
                 tScroll = { ['x']=0,['y']=0 }
                 return
             end
-            table.insert(tPopup, 1, {
+            openPopup({
                 ["status"] = true,
                 ["name"] = "Options - Ask",
                 ["size"] = {
@@ -806,7 +927,6 @@ function options(event, ...)
                     { ['x']=20, ['y']=4, ["label"]="Edit", ["status"]=false, ["func"]=function() options("close") options("create", "force") end }
                 }
             })
-            tCursor.selectedItem = 1
         end
     end
 end
@@ -826,7 +946,7 @@ function exit(event, ...)
             running = false
             return
         end
-        table.insert(tPopup, 1, {
+        openPopup({
             ["status"] = true,
             ["name"] = "Warning",
             ["size"] = {
@@ -841,7 +961,6 @@ function exit(event, ...)
                 { ['x']=24, ['y']=4, ["label"]="Exit", ["status"]=false, ["func"]=function() exit("JUST DO IT") end }
             }
         })
-        tCursor.selectedItem = 1
     end
 end
 
@@ -943,17 +1062,20 @@ function specialChar(event, ...)
             tNewPopup.list[1].content[#tNewPopup.list[1].content+1] = string.char(i)
         end
         tNewPopup.list[1].size.max = #tNewPopup.list[1].content
-        table.insert(tPopup, 1, tNewPopup)
-        tCursor.selectedItem = 1
+        openPopup(tNewPopup)
     end
 end
 
 function openShell()
-    if shell.openTab then
-        local nTask = shell.openTab("shell")
-        if nTask then shell.switchTab(nTask) end
-        category.reset()
-    else error("create", "multishell", {"The Multishell API is required,","to run a shell in a new tab!","(only available for advanced-PCs!)"})
+    if bLvlOS then
+        levelLaunch("shell")
+    else
+        if shell.openTab then
+            local nTask = shell.openTab("shell")
+            if nTask then shell.switchTab(nTask) end
+            category.reset()
+        else error("create", "multishell", {"The Multishell API is required,","to run a shell in a new tab!","(only available for advanced-PCs!)"})
+        end
     end
 end
 
@@ -1205,7 +1327,6 @@ local fTerm={
         nTerm.setCursorPos(nX,nY)
     end
 } fTerm.clear()
-local draw = { }
 function draw.highlighted(sLine, nIndex)
     while #sLine > 0 do
         for _,v in pairs(tPatterns) do
@@ -2230,6 +2351,10 @@ function input.handle.insert(event)
         return
     end
     if event[1] == "key" then
+        if event[2] == keys.f5 and bLvlOS and not event[4] then
+            os.queueEvent("key", {event[2], event[3], true})
+            return
+        end
         if type(input.menu.key)=="function" then
             input.menu.key(event[2],event[3])
         end
@@ -2321,7 +2446,6 @@ function input.handle.mouse(event)
 end
 
 function init()
-    swapColors()
     --[[ Check args ]]
     if #tArgs > 0 then
         local arg = tArgs[1]
@@ -2360,7 +2484,21 @@ function init()
         table.insert(tContent, "")
     end
     --[[ Options ]]
+    if #tContent == 0 then
+        table.insert(tContent, "")
+    end
     options("load")
+    swapColors()
+    if bLvlOS then
+        local title = "CONSULT - "..fs.getName(sPath)
+        if tContent[1] == "" then
+            title = "CONSULT"
+        end
+        LevelOS.setTitle(title)
+        LevelOS.self.window.icon = {'\138', "9"}
+    elseif multishell then
+        multishell.setTitle(multishell.getCurrent(), "[cosu]-"..sPath)
+    end
     return true
 end
 
@@ -2399,6 +2537,7 @@ local function main()
     elseif event[1]:find("mouse") then
         input.handle.mouse(event)
     elseif event[1] == "term_resize" then
+        sleep()
         w,h = term.getSize()
         fTerm.clear()
     elseif event[1] == "terminate" then
@@ -2466,9 +2605,8 @@ parallel.waitForAny(
 
 --[[ Clear mess ]]
 local sDir = '/'..fs.getDir(shell.getRunningProgram())..'/'
-local sCurID = tostring( (type(multishell)~="nil") and multishell.getCurrent() or "" )
+local sCurID = tostring( (not bLvlOS and type(multishell)~="nil") and multishell.getCurrent() or "" )
 fs.delete(sDir..".tmp"..sCurID)
-
 swapColors()
 term.setBackgroundColor(colors.black)
 term.setTextColor(colors.white)
