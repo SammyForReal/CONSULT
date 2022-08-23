@@ -98,7 +98,7 @@ local function update()
         function()
             statusMsg("Check for Updates")
             for i=1,3 do
-                if not bSkip then sleep(0.75) end
+                if not bSkip then sleep(0.5) end
                 term.write('.')
             end
         end,
