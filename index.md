@@ -7,7 +7,7 @@
 
 About
 -----
-CONSULT is designed to run on as many platforms related to CraftOS as possible! It's compatible with non-advanced PCs, LevelOS, CCEmuX, CraftOS-PC and of course with CC:T too. CONSULT tries to provide a faster workflow. </br>
+CONSULT is designed to run on as many platforms related to CraftOS as possible! It's compatible with non-advanced PCs, LevelOS, CCEmuX, CraftOS-PC and of course with CC:T too. CONSULT tries to provide a faster workflow.  
 <p align="center"> <img alt="screenshot" src="./preview.png"></p>
 
 Installation
