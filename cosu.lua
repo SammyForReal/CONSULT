@@ -117,7 +117,7 @@ local tPatterns = {
     { "^\'.-[^\\]\'", colorMatch["string"] },
     { "^%[%[%]%]", colorMatch["string"] },
     { "^%[%[.-[^\\]%]%]", colorMatch["string"] },
-    { "^[\127\162\163\165\169\174\182\181\177\183\186\188\189\190\215\247@]+", colorMatch["special"] },
+    { "^[\000\001\002\003\004\005\006\007\008\009\010\011\012\013\014\015\016\017\018\019\020\021\022\023\024\025\026\027\028\029\030\031\127\128\129\130\131\132\134\135\136\137\138\139\140\141\142\143\144\145\146\147\148\149\150\151\152\153\154\155\156\157\158\159\160@]+", colorMatch["special"] },
     { "^[%d][xA-Fa-f.%d#]+", colorMatch["number"] },
     { "^[%d]+", colorMatch["number"] },
     { "^[,{}%[%]%(%)]", colorMatch["bracket"] },
@@ -135,10 +135,10 @@ local tPatterns = {
     { "^[^%w_]", colorMatch["text"] }
 }
 local sGithub = {
-    ["api"]="https://api.github.com/repos/1turtle/consult/releases/latest",
-    ["latest"]="https://github.com/1Turtle/consult/releases/latest/download/cosu.lua"
+    ["api"]="https://api.github.com/repos/sammyforreal/consult/releases/latest",
+    ["latest"]="https://github.com/sammyforreal/consult/releases/latest/download/cosu.lua"
 }
-local sVersion = "1.4.3"
+local sVersion = "1.4.4"
 local bPreview = false
 local tArgs = { ... }
 local init = function() return end
