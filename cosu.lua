@@ -22,12 +22,16 @@ cosuConf.tKeyboard = {
         { "NewFile", keys.n },
         { "SaveAs", { keys.s, keys.leftShift } },
         { "Save", keys.s },
+        { "Comment", keys.slash },
+        { "Indent", keys.rightBracket },
+        { "Dedent", keys.leftBracket },
     }
 }
 cosuConf.bCursorIsBlock = false
 cosuConf.cAccentColor = colors.blue
 cosuConf.bDoubleClickButton = false
 cosuConf.nTabSpace = 4 --[[ Normaly 4 spaces. ]]
+cosuConf.bTabIndentsLine = true
 cosuConf.bJumpAtEndToBegin = true
 cosuConf.bShadows = true
 cosuConf.tPalette = {
@@ -1988,17 +1992,16 @@ end
 
 function input.insert.cursorBackspace(bJump)
     if not (tCursor.y == 1 and tCursor.x == 1) then
-        local lastY = tCursor.y
         local sLine = tContent[tCursor.y]
         if not bJump and sLine:sub(tCursor.x-cosuConf.nTabSpace, tCursor.x-1) == (' '):rep(cosuConf.nTabSpace) then
             tContent[tCursor.y] = sLine:sub(1, tCursor.x - cosuConf.nTabSpace - 1) .. sLine:sub(tCursor.x)
             for i=1, cosuConf.nTabSpace do input.insert.cursorHorizontal("left") end
-        elseif tCursor.x >= 1 then
+        elseif tCursor.x > 1 then
             local removes = bJump and computeJump(tContent[tCursor.y], "left") or 1
             tContent[tCursor.y] = sLine:sub(1, tCursor.x - 1 - removes) .. sLine:sub(tCursor.x)
             for i=1, removes do input.insert.cursorHorizontal("left") end
-        end
-        if lastY ~= tCursor.y then
+        else
+            input.insert.cursorHorizontal("left")
             if tCursor.y > #tContent-3 then tScroll.y = tScroll.y end
             tContent[tCursor.y] = tContent[tCursor.y] .. tContent[tCursor.y+1]
             table.remove(tContent,tCursor.y+1)
@@ -2007,20 +2010,16 @@ function input.insert.cursorBackspace(bJump)
     end
 end
 
-function input.insert.cursorEnter()
+function input.insert.cursorEnter(bBelow)
     local sLine = tContent[tCursor.y]
-    local sSpaces = ""
     if type(sLine) == "nil" then sLine = "" end
-    local nCounter = 0
-    for i=1,#sLine do
-        if sLine:sub(i,i)~=" " then
-            break
-        end
-        nCounter=nCounter+1
+    local sSpaces = sLine:match("^%s*")
+    if bBelow then
+        table.insert(tContent, tCursor.y+1, sSpaces)
+    else
+        tContent[tCursor.y] = sLine:sub(1, tCursor.x-1)
+        table.insert(tContent, tCursor.y+1, sSpaces..sLine:sub(tCursor.x))
     end
-    sSpaces = ((' '):rep(cosuConf.nTabSpace)):rep(math.floor(nCounter/4))
-    tContent[tCursor.y] = sLine:sub(1, tCursor.x-1)
-    table.insert(tContent, tCursor.y+1, sSpaces..sLine:sub(tCursor.x))
     input.insert.cursorVertical("down")
     tCursor.x = #sSpaces+1
     bSaved = false
@@ -2062,6 +2061,39 @@ function input.insert.mouseClick(nButton, nX, nY)
             end
         end
     end
+end
+
+function input.insert.commentLine()
+    local sLine = tContent[tCursor.y]
+    local sWhiteSpace = sLine:match("^%s*")
+    sLine = sLine:sub(#sWhiteSpace + 1)
+    local sDashDash = sLine:match("^%-%- ?")
+    if sDashDash then
+        tContent[tCursor.y] = sWhiteSpace .. sLine:sub(#sDashDash + 1)
+        if tCursor.x > #sWhiteSpace then
+            for i=1, math.min(tCursor.x - #sWhiteSpace - 1, 3) do input.insert.cursorHorizontal("left") end
+        end
+    else
+        tContent[tCursor.y] = sWhiteSpace .. "-- " .. sLine
+        if tCursor.x > #sWhiteSpace then
+            for i=1, 3 do input.insert.cursorHorizontal("right") end
+        end
+    end
+    bSaved = false
+end
+
+function input.insert.indentLine()
+    tContent[tCursor.y] = (" "):rep(cosuConf.nTabSpace) .. tContent[tCursor.y]
+    for i=1, cosuConf.nTabSpace do input.insert.cursorHorizontal("right") end
+    bSaved = false
+end
+
+function input.insert.dedentLine()
+    if tContent[tCursor.y]:match("^" .. (" "):rep(cosuConf.nTabSpace)) then
+        tContent[tCursor.y] = tContent[tCursor.y]:sub(cosuConf.nTabSpace + 1)
+        for i=1, math.min(tCursor.x-1, cosuConf.nTabSpace) do input.insert.cursorHorizontal("left") end
+    end
+    bSaved = false
 end
 
 function input.menu.cursorEnter()
@@ -2347,30 +2379,29 @@ function input.insertAuto.cursorVertical(sWay)
     end
 end
 
-function input.insertAuto.cursorHorizontal(sWay)
-    input.insert.cursorHorizontal(sWay)
+function input.insertAuto.cursorHorizontal(sWay, bJump)
+    input.insert.cursorHorizontal(sWay, bJump)
 end
 
 function input.insertAuto.char(sChar)
     input.insert.char(sChar)
 end
 
-function input.insertAuto.cursorDelete()
-    input.insert.cursorDelete()
+function input.insertAuto.cursorDelete(bJump)
+    input.insert.cursorDelete(bJump)
 end
 
-function input.insertAuto.cursorBackspace()
-    input.insert.cursorBackspace()
+function input.insertAuto.cursorBackspace(bJump)
+    input.insert.cursorBackspace(bJump)
 end
 
-function input.insertAuto.cursorEnter()
-    input.insert.cursorEnter()
+function input.insertAuto.cursorEnter(bBelow)
+    input.insert.cursorEnter(bBelow)
 end
 
 function input.insertAuto.mouseScroll(nScroll)
-    local sWay = "up"
-    if nScroll == 1 then sWay = "down" end
-    input.insertAuto.cursorVertical(sWay, false)
+    local sWay = nScroll == 1 and "down" or "up"
+    input.insertAuto.cursorVertical(sWay)
 end
 
 function input.insertAuto.mouseClick(nButton, nX, nY)
@@ -2411,8 +2442,11 @@ function input.handle.insert(event)
     if event[2] == keys.leftAlt then
         tActiveKeys[keys.leftAlt] = (event[1] == "key")
         return
-    end if event[2] == keys.leftCtrl or event[2] == keys.rightCtrl then
+    elseif event[2] == keys.leftCtrl or event[2] == keys.rightCtrl then
         tActiveKeys["CTRL"] = (event[1] == "key")
+        return
+    elseif event[2] == keys.leftShift or event[2] == keys.rightShift then
+        tActiveKeys["SHIFT"] = (event[1] == "key")
         return
     end
     if event[1] == "key" then
@@ -2444,7 +2478,13 @@ function input.handle.insert(event)
             if type(input[mode].tab) == "function" then
                 input[mode].tab()
             elseif mode == "insert" then
-                input[mode].char((' '):rep(cosuConf.nTabSpace))
+                if tActiveKeys["SHIFT"] then
+                    input[mode].dedentLine()
+                elseif cosuConf.bTabIndentsLine then
+                    input[mode].indentLine()
+                else
+                    input[mode].char((' '):rep(cosuConf.nTabSpace))
+                end
             elseif mode == "insertAuto" and tAutoCompleteList[tCursor.autoListY+1] then
                 input.insert.char(tAutoCompleteList[tCursor.autoListY+1],true)
                 tCursor.autoListY = 0
@@ -2454,7 +2494,7 @@ function input.handle.insert(event)
         elseif event[2] == cosuConf.tKeyboard.backspace and type(input[mode].cursorBackspace) == "function" then
             input[mode].cursorBackspace(tActiveKeys["CTRL"])
         elseif event[2] == cosuConf.tKeyboard.enter and type(input[mode].cursorEnter) == "function" then
-            input[mode].cursorEnter()
+            input[mode].cursorEnter(tActiveKeys["CTRL"])
         elseif event[2] == cosuConf.tKeyboard.home and type(input[mode].cursorHome) == "function" then
             input[mode].cursorHome(tActiveKeys["CTRL"])
         elseif event[2] == cosuConf.tKeyboard["end"] and type(input[mode].cursorEnd) == "function" then
@@ -2487,11 +2527,20 @@ function input.handle.insert(event)
                         if #sExecute > 0 then break end
                     end
                 end
-                if sExecute == "NewFile" then       file("create", "new")
-                elseif sExecute == "SaveAs" then    file("create", "save as")
-                elseif sExecute == "Save" then      file("create", "save")
+                if sExecute == "NewFile" then
+                    file("create", "new")
+                    tActiveKeys["CTRL"] = false
+                elseif sExecute == "SaveAs" then
+                    file("create", "save as")
+                elseif sExecute == "Save" then
+                    file("create", "save")
+                elseif sExecute == "Comment" and type(input[mode].commentLine) == "function" then
+                    input[mode].commentLine()
+                elseif sExecute == "Indent" and type(input[mode].indentLine) == "function" then
+                    input[mode].indentLine()
+                elseif sExecute == "Dedent" and type(input[mode].dedentLine) == "function" then
+                    input[mode].dedentLine()
                 end
-                tActiveKeys["CTRL"] = false
             end
             -- Widgets
             for _,widget in pairs(tWidgets) do
